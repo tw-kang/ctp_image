@@ -5,6 +5,10 @@ RUN yum install -y epel-release
 RUN yum install -y git procps-ng wget which sudo openssh-server openssh-clients java-1.8.0-openjdk-devel 
 RUN yum install -y dos2unix lcov bc expect diffutils
 
+RUN ssh-keygen -A
+RUN sudo sed -i 's/^account.*pam_nologin.so/#&/' /etc/pam.d/sshd
+RUN sudo /usr/sbin/sshd
+
 # Add a user for running tests
 RUN useradd -ms /bin/bash shell && \
     echo 'shell:cub123!@#' | chpasswd && \
@@ -12,6 +16,7 @@ RUN useradd -ms /bin/bash shell && \
 
 # Switch to the new user
 USER shell
+ENV USER=shell
 WORKDIR /home/shell
 
 # Set up environment variables for GitHub credentials
