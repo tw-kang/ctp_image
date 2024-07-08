@@ -28,7 +28,7 @@ ARG BRANCH
 
 # Clone the repositories
 RUN git clone --depth 1 -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testtools.git && \
-    cp -rf /home/shell/cubrid-testtools/CTP /home/shell_ctrl
+    cp -rf /home/shell_ctrl/cubrid-testtools/CTP /home/shell_ctrl
 
 # Set up Common ENV
 ENV JAVA_HOME=/usr/lib/jvm/java
