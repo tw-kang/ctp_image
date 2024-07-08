@@ -27,10 +27,10 @@ ARG GITHUB_TOKEN
 ARG BRANCH
 
 # Clone the repositories
-RUN git clone -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testtools.git && \
+RUN git clone --depth 1 -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testtools.git && \
     cp -rf /home/shell/cubrid-testtools/CTP /home/shell
-RUN git clone -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases-private-ex.git
-RUN git clone -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases.git
+RUN git clone --depth 1 -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases-private-ex.git
+RUN git clone --depth 1 -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases.git
 
 # Set up Common ENV
 ENV JAVA_HOME=/usr/lib/jvm/java
