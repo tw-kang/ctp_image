@@ -30,7 +30,7 @@ ARG BRANCH
 RUN git clone -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testtools.git && \
     cp -rf /home/shell/cubrid-testtools/CTP /home/shell
 RUN git clone -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases-private-ex.git
-RUN git clone -b ${BRNACH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases.git
+RUN git clone -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases.git
 
 # Set up Common ENV
 ENV JAVA_HOME=/usr/lib/jvm/java
