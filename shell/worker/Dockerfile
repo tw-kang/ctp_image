@@ -11,8 +11,11 @@ RUN sudo /usr/sbin/sshd
 
 # Add a user for running tests
 RUN useradd -ms /bin/bash shell && \
-    echo 'shell:cub123!@#' | chpasswd && \
+    echo 'shell:shell' | chpasswd && \
     echo 'shell ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+COPY docker-entrypoint.sh /entrypoint.sh
+RUN chmod 775 /entrypoint.sh
 
 # Switch to the new user
 USER shell
@@ -21,25 +24,18 @@ WORKDIR /home/shell
 
 # Set up environment variables for GitHub credentials
 ARG GITHUB_TOKEN
+ARG BRANCH
 
 # Clone the repositories
-RUN git clone https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testtools.git && \
-    cd cubrid-testtools && \
-    git checkout develop 
-
-RUN git clone https://${GITHUB_TOKEN}@github.com/tw-kang/cubrid-testcases-private-ex.git && \
-    cd cubrid-testcases-private-ex && \
-    git checkout develop
-
-RUN git clone https://${GITHUB_TOKEN}@github.com/tw-kang/cubrid-testcases.git && \
-    cd cubrid-testcases && \
-    git checkout develop
+RUN git clone -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testtools.git && \
+RUN cp -rf /home/shell/cubrid-testtools/CTP /home/shell
+RUN git clone -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases-private-ex.git && \
+RUN git clone -b ${BRNACH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases.git && \
 
 # Set up Common ENV
-ENV JAVA_HOME /usr/lib/jvm/java
+ENV JAVA_HOME=/usr/lib/jvm/java
 
 # Set up CTP
-RUN cp -rf /home/shell/cubrid-testtools/CTP /home/shell
 ENV CTP_HOME=/home/shell/CTP
 ENV PATH=$CTP_HOME/bin:$CTP_HOME/common/script:$PATH
 ENV CTP_BRANCH_NAME="develop"
@@ -58,8 +54,6 @@ ENV SHLIB_PATH=$LD_LIBRARY_PATH
 ENV LIBPATH=$LD_LIBRARY_PATH
 ENV PATH=$CUBRID/bin:/usr/sbin:$PATH
 
-COPY docker-entrypoint.sh /entrypoint.sh
-RUN sudo chmod 775 /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]
