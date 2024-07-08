@@ -1,5 +1,7 @@
 FROM rockylinux:8
 
+LABEL Description="This is a [shell] test environment image for CUBRID"
+
 # Install required packages
 RUN yum install -y epel-release
 RUN yum install -y git procps-ng wget which sudo openssh-server openssh-clients java-1.8.0-openjdk-devel 
