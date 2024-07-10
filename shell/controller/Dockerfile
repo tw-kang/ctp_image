@@ -3,13 +3,15 @@ FROM rockylinux:8
 LABEL Description="This is a [shell] test environment image for CUBRID"
 
 # Install required packages
-RUN yum install -y epel-release
-RUN yum install -y git procps-ng wget which sudo openssh-server openssh-clients java-1.8.0-openjdk-devel 
-RUN yum install -y dos2unix lcov bc expect diffutils
+RUN yum install -y epel-release && \
+    yum install -y git procps-ng wget which sudo openssh-server openssh-clients java-1.8.0-openjdk-devel && \
+    yum install -y dos2unix lcov bc expect diffutils && \
+    yum clean all && \
+    rm -rf /var/cache/yum
 
-RUN ssh-keygen -A
-RUN sudo sed -i 's/^account.*pam_nologin.so/#&/' /etc/pam.d/sshd
-RUN sudo /usr/sbin/sshd
+RUN ssh-keygen -A && \
+    sed -i 's/^account.*pam_nologin.so/#&/' /etc/pam.d/sshd && \
+    mkdir -p /var/run/sshd
 
 # Add a user for running tests
 RUN useradd -ms /bin/bash shell_ctrl && \
@@ -32,14 +34,14 @@ ARG BRANCH
 RUN git clone --depth 1 -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testtools.git && \
     cp -rf /home/shell_ctrl/cubrid-testtools/CTP /home/shell_ctrl
 
-# Set up Common ENV
-ENV JAVA_HOME=/usr/lib/jvm/java
-
-# Set up CTP
-ENV CTP_HOME=/home/shell_ctrl/CTP
-ENV PATH=$CTP_HOME/bin:$CTP_HOME/common/script:$PATH
-ENV CTP_BRANCH_NAME="develop"
-ENV CTP_SKIP_UPDATE=0
+#Set up ENV
+RUN echo "#JAVA ENV" >> /home/shell_ctrl/.bash_profile && \
+    echo "export JAVA_HOME=/usr/lib/jvm/java-1.8.0" >> /home/shell_ctrl/.bash_profile && \
+    echo "#CTP ENV" >> /home/shell_ctrl/.bash_profile && \
+    echo "export CTP_HOME=/home/shell_ctrl/CTP" >> /home/shell_ctrl/.bash_profile && \
+    echo "export PATH=\$CTP_HOME/bin:\$CTP_HOME/common/script:\$PATH" >> /home/shell_ctrl/.bash_profile && \
+    echo "export CTP_BRANCH_NAME=develop" >> /home/shell_ctrl/.bash_profile && \
+    echo "export CTP_SKIP_UPDATE=0" >> /home/shell_ctrl/.bash_profile
 
 
 ENTRYPOINT ["/entrypoint.sh"]

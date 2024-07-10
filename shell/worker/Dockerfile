@@ -3,13 +3,15 @@ FROM rockylinux:8
 LABEL Description="This is a [shell] test environment image for CUBRID"
 
 # Install required packages
-RUN yum install -y epel-release
-RUN yum install -y git procps-ng wget which sudo openssh-server openssh-clients java-1.8.0-openjdk-devel 
-RUN yum install -y dos2unix lcov bc expect diffutils
+RUN yum install -y epel-release && \
+    yum install -y git procps-ng wget which sudo openssh-server openssh-clients java-1.8.0-openjdk-devel && \
+    yum install -y dos2unix lcov bc expect diffutils && \
+    yum clean all && \
+    rm -rf /var/cache/yum
 
-RUN ssh-keygen -A
-RUN sudo sed -i 's/^account.*pam_nologin.so/#&/' /etc/pam.d/sshd
-RUN sudo /usr/sbin/sshd
+RUN ssh-keygen -A && \
+    sed -i 's/^account.*pam_nologin.so/#&/' /etc/pam.d/sshd && \
+    mkdir -p /var/run/sshd
 
 # Add a user for running tests
 RUN useradd -ms /bin/bash shell && \
@@ -34,27 +36,27 @@ RUN git clone --depth 1 -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/c
 RUN git clone --depth 1 -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases-private-ex.git
 RUN git clone --depth 1 -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases.git
 
-# Set up Common ENV
-ENV JAVA_HOME=/usr/lib/jvm/java
-
-# Set up CTP
-ENV CTP_HOME=/home/shell/CTP
-ENV PATH=$CTP_HOME/bin:$CTP_HOME/common/script:$PATH
-ENV CTP_BRANCH_NAME="develop"
-ENV CTP_SKIP_UPDATE=0
-RUN mkdir do_not_delete_core
-RUN mkdir ERROR_BACKUP
-
-# Set up shell ENV
-ENV init_path=$CTP_HOME/shell/init_path
-
-# Set up CUBRID ENV
-ENV CUBRID=/home/shell/CUBRID
-ENV CUBRID_DATABASES=$CUBRID/databases
-ENV LD_LIBRARY_PATH=$CUBRID/lib:$CUBRID/cci/lib:$LD_LIBRARY_PATH
-ENV SHLIB_PATH=$LD_LIBRARY_PATH
-ENV LIBPATH=$LD_LIBRARY_PATH
-ENV PATH=$CUBRID/bin:/usr/sbin:$PATH
+#Set up ENV
+RUN echo "#JAVA ENV" >> /home/shell/.bash_profile && \
+    echo "export JAVA_HOME=/usr/lib/jvm/java-1.8.0" >> /home/shell/.bash_profile && \
+    echo "#CTP ENV" >> /home/shell/.bash_profile && \
+    echo "export CTP_HOME=/home/shell/CTP" >> /home/shell/.bash_profile && \
+    echo "export PATH=\$CTP_HOME/bin:\$CTP_HOME/common/script:\$PATH" >> /home/shell/.bash_profile && \
+    echo "export CTP_BRANCH_NAME=develop" >> /home/shell/.bash_profile && \
+    echo "export CTP_SKIP_UPDATE=0" >> /home/shell/.bash_profile && \
+    echo "#[shell] ENV" >> /home/shell/.bash_profile && \
+    echo "export init_path=\$CTP_HOME/shell/init_path" >> /home/shell/.bash_profile && \
+    echo "#CUBRID ENV" >> /home/shell/.bash_profile && \
+    echo "export CUBRID=/home/shell/CUBRID" >> /home/shell/.bash_profile && \
+    echo "export CUBRID_DATABASES=\$CUBRID/databases" >> /home/shell/.bash_profile && \
+    echo "export LD_LIBRARY_PATH=\$CUBRID/lib:\$CUBRID/cci/lib:\$LD_LIBRARY_PATH" >> /home/shell/.bash_profile && \
+    echo "export SHLIB_PATH=\$LD_LIBRARY_PATH" >> /home/shell/.bash_profile && \
+    echo "export LIBPATH=\$LD_LIBRARY_PATH" >> /home/shell/.bash_profile && \
+    echo "export PATH=\$CUBRID/bin:/usr/sbin:\$PATH" >> /home/shell/.bash_profile && \
+    mkdir -p /home/shell/do_not_delete_core && \
+    mkdir -p /home/shell/ERROR_BACKUP && \
+    chown -R shell:shell /home/shell/do_not_delete_core && \
+    chown -R shell:shell /home/shell/ERROR_BACKUP
 
 
 ENTRYPOINT ["/entrypoint.sh"]
