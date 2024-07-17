@@ -37,13 +37,13 @@ FROM rockylinux:8
 LABEL Description="This is a [shell] test environment image for CUBRID"
 
 # Copy only the necessary directories from the builder stage
-COPY --from=builder /entrypoint.sh /entrypoint.sh
-COPY --from=builder /home/shell_ctrl /home/shell_ctrl
+COPY --from=builder / /
 
 RUN chmod 775 /entrypoint.sh
 
 # Switch to the new user
 USER shell_ctrl
+ENV USER=shell_ctrl
 WORKDIR /home/shell_ctrl
 
 # Set up environment variables
