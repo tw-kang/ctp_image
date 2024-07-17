@@ -6,16 +6,15 @@ RUN yum install -y epel-release && \
     yum install -y git procps-ng wget which sudo openssh-server openssh-clients java-1.8.0-openjdk-devel && \
     yum install -y dos2unix lcov bc expect diffutils && \
     yum clean all && \
-    rm -rf /var/cache/yum
-
-RUN ssh-keygen -A && \
+    rm -rf /var/cache/yum && \
+    ssh-keygen -A && \
     sed -i 's/^account.*pam_nologin.so/#&/' /etc/pam.d/sshd && \
-    mkdir -p /var/run/sshd
-
-# Add a user for running tests
-RUN useradd -ms /bin/bash shell && \
+    mkdir -p /var/run/sshd && \
+    useradd -ms /bin/bash shell && \
     echo 'shell:shell' | chpasswd && \
-    echo 'shell ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+    echo 'shell ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
+    mkdir -p /home/shell/do_not_delete_core /home/shell/ERROR_BACKUP && \
+    chown -R shell:shell /home/shell/do_not_delete_core /home/shell/ERROR_BACKUP
 
 COPY docker-entrypoint.sh /entrypoint.sh
 RUN chmod 775 /entrypoint.sh
@@ -29,28 +28,29 @@ WORKDIR /home/shell
 ARG GITHUB_TOKEN
 ARG BRANCH
 
-# Clone the repositories
-RUN git config --global pack.threads 4
-RUN git clone --depth 1 -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testtools.git && \
-    cp -rf /home/shell/cubrid-testtools/CTP /home/shell
-RUN git clone --depth 1 -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases.git
-RUN git clone --depth 1 -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases-private-ex.git
+# Configure Git and clone the repositories
+RUN git config --global pack.threads 4 && \
+    git clone --depth 1 -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testtools.git && \
+    cp -rf /home/shell/cubrid-testtools/CTP /home/shell && \
+    git clone --depth 1 -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases.git && \
+    git clone --depth 1 -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases-private-ex.git
 
 ### Second stage: create final image
 FROM rockylinux:8
 
 LABEL Description="This is a [shell] test environment image for CUBRID"
 
-# Copy the prepared environment from the builder stage
-COPY --from=builder / /
+# Copy only the necessary directories from the builder stage
+COPY --from=builder /entrypoint.sh /entrypoint.sh
+COPY --from=builder /home/shell /home/shell
 
-RUN chmod 775 /entrypoint.sh 
+RUN chmod 775 /entrypoint.sh
 
 # Switch to the new user
 USER shell
 WORKDIR /home/shell
 
-#Set up ENV
+# Set up environment variables
 RUN echo "#JAVA ENV" >> /home/shell/.bash_profile && \
     echo "export JAVA_HOME=/usr/lib/jvm/java-1.8.0" >> /home/shell/.bash_profile && \
     echo "#CTP ENV" >> /home/shell/.bash_profile && \
@@ -66,12 +66,7 @@ RUN echo "#JAVA ENV" >> /home/shell/.bash_profile && \
     echo "export LD_LIBRARY_PATH=\$CUBRID/lib:\$CUBRID/cci/lib:\$LD_LIBRARY_PATH" >> /home/shell/.bash_profile && \
     echo "export SHLIB_PATH=\$LD_LIBRARY_PATH" >> /home/shell/.bash_profile && \
     echo "export LIBPATH=\$LD_LIBRARY_PATH" >> /home/shell/.bash_profile && \
-    echo "export PATH=\$CUBRID/bin:/usr/sbin:\$PATH" >> /home/shell/.bash_profile && \
-    mkdir -p /home/shell/do_not_delete_core && \
-    mkdir -p /home/shell/ERROR_BACKUP && \
-    chown -R shell:shell /home/shell/do_not_delete_core && \
-    chown -R shell:shell /home/shell/ERROR_BACKUP
-
+    echo "export PATH=\$CUBRID/bin:/usr/sbin:\$PATH" >> /home/shell/.bash_profile
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]
