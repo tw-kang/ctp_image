@@ -1,6 +1,5 @@
-FROM rockylinux:8
-
-LABEL Description="This is a [shell] test environment image for CUBRID"
+# First stage: prepare the base with all dependencies and cloned repositories
+FROM rockylinux:8 as builder
 
 # Install required packages
 RUN yum install -y epel-release && \
@@ -35,6 +34,20 @@ RUN git clone --depth 1 -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/c
     cp -rf /home/shell/cubrid-testtools/CTP /home/shell
 RUN git clone --depth 1 -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases-private-ex.git
 RUN git clone --depth 1 -b ${BRANCH} https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases.git
+
+### Second stage: create final image
+FROM rockylinux:8
+
+LABEL Description="This is a [shell] test environment image for CUBRID"
+
+# Copy the prepared environment from the builder stage
+COPY --from=builder / /
+
+RUN chmod 775 /entrypoint.sh 
+
+# Switch to the new user
+USER shell
+WORKDIR /home/shell
 
 #Set up ENV
 RUN echo "#JAVA ENV" >> /home/shell/.bash_profile && \
