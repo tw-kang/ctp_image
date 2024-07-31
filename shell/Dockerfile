@@ -31,4 +31,3 @@ ENV CTP_BRANCH_NAME=develop
 ENV CTP_SKIP_UPDATE=0
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["/bin/bash"]
