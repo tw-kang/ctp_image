@@ -18,7 +18,7 @@ start_ssh_and_set_limits() {
 # Define the run_checkout function
 run_checkout() {
   debug "run_checkout" "$LINENO"
-  sudo -u shell -i bash -c "
+  sudo -u shell bash -c "
     export GITHUB_TOKEN=${GITHUB_TOKEN}
     echo debug - $GITHUB_TOKEN
     cd /home/shell
@@ -31,7 +31,7 @@ run_checkout() {
 common_setup() {
   local user=$1
   debug "common_setup , user : $user" "$LINENO"
-  sudo -u "$user" -i bash -c "
+  sudo -u "$user" bash -c "
     git config --global pack.threads 0
     git clone --depth 1 -b develop https://github.com/CUBRID/cubrid-testtools.git /home/$user/cubrid-testtools &&
     sudo cp -rf /home/$user/cubrid-testtools/CTP /home/$user/ &&
@@ -44,7 +44,7 @@ configure_controller() {
   debug "configure_controller" "$LINENO"
   $(declare -f common_setup)
   common_setup "shell_ctrl"
-  sudo -u shell_ctrl -i bash -c "
+  sudo -u shell_ctrl bash -c "
     cd /home/shell_ctrl
     echo '#JAVA ENV' >> /home/shell_ctrl/.bash_profile
     echo 'export JAVA_HOME=/usr/lib/jvm/java-1.8.0' >> /home/shell_ctrl/.bash_profile
@@ -63,7 +63,7 @@ configure_worker() {
   $(declare -f common_setup)
   $(declare -f run_checkout)
   common_setup "shell"
-  sudo -u shell -i bash -c "
+  sudo -u shell bash -c "
     cd /home/shell
     run_checkout
     echo '#JAVA ENV' >> /home/shell/.bash_profile
