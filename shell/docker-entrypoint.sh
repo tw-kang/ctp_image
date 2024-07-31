@@ -8,17 +8,21 @@ start_ssh_and_set_limits() {
 
 # Define the run_checkout function
 run_checkout() {
+  sudo -E -u shell -i <<EOF
+  cd ~/
   git clone --depth 1 -b develop https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases.git
   git clone --depth 1 -b develop https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases-private-ex.git
+EOF
 }
 
 # Perform common git setup and clone operations
 common_setup() {
   local user=$1
-  sudo -u $user -i <<EOF
-    git config --global pack.threads 4
-    git clone --depth 1 -b develop https://github.com/CUBRID/cubrid-testtools.git /home/$user/cubrid-testtools
-    cp -rf /home/$user/cubrid-testtools/CTP /home/$user/
+  sudo -E -u $user -i <<EOF
+  git config --global pack.threads 4
+  git clone --depth 1 -b develop https://github.com/CUBRID/cubrid-testtools.git /home/$user/cubrid-testtools
+  sudo cp -rf /home/$user/cubrid-testtools/CTP /home/$user/
+  sudo chown -R $user:$user /home/$user/CTP
 EOF
 }
 
@@ -26,7 +30,7 @@ EOF
 configure_controller() {
   $(declare -f common_setup)
   common_setup shell_ctrl
-  sudo -u shell_ctrl -i <<EOF
+  sudo -E -u shell_ctrl -i <<EOF
   cd /home/shell_ctrl
   echo "#JAVA ENV" >> /home/shell_ctrl/.bash_profile
   echo "export JAVA_HOME=/usr/lib/jvm/java-1.8.0" >> /home/shell_ctrl/.bash_profile
@@ -44,7 +48,7 @@ configure_worker() {
   $(declare -f common_setup)
   $(declare -f run_checkout)
   common_setup shell
-  sudo -u shell -i <<EOF
+  sudo -E -u shell -i <<EOF
   cd /home/shell
   run_checkout
   echo "#JAVA ENV" >> /home/shell/.bash_profile
