@@ -32,7 +32,7 @@ common_setup() {
   local user=$1
   debug "common_setup , user : $user" "$LINENO"
   sudo -u $user -i bash -c "
-    git config pack.threads 0
+    git config --global pack.threads 0
     git clone --depth 1 -b develop https://github.com/CUBRID/cubrid-testtools.git /home/$user/cubrid-testtools &&
     sudo cp -rf /home/$user/cubrid-testtools/CTP /home/$user/ &&
     sudo chown -R $user:$user /home/$user/CTP
@@ -43,7 +43,7 @@ common_setup() {
 configure_controller() {
   debug "configure_controller" "$LINENO"
   $(declare -f common_setup)
-  common_setup shell_ctrl
+  common_setup 'shell_ctrl'
   sudo -u shell_ctrl -i bash -c "
     cd /home/shell_ctrl
     echo '#JAVA ENV' >> /home/shell_ctrl/.bash_profile
@@ -62,7 +62,7 @@ configure_worker() {
   debug "configure_worker" "$LINENO"
   $(declare -f common_setup)
   $(declare -f run_checkout)
-  common_setup shell
+  common_setup 'shell'
   sudo -u shell -i bash -c "
     cd /home/shell
     run_checkout
