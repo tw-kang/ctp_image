@@ -45,7 +45,7 @@ common_setup() {
 configure_controller() {
   debug "configure_controller" "$LINENO"
   $(declare -f common_setup)
-  common_setup "shell_ctrl"
+  common_setup shell_ctrl
   sudo -u shell_ctrl bash -c "
     cd /home/shell_ctrl
     echo '#JAVA ENV' >> /home/shell_ctrl/.bash_profile
@@ -64,7 +64,7 @@ configure_worker() {
   debug "configure_worker" "$LINENO"
   $(declare -f common_setup)
   $(declare -f run_checkout)
-  common_setup "shell"
+  common_setup shell
   sudo -u shell bash -c "
     cd /home/shell
     run_checkout
