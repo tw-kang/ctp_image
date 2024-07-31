@@ -89,6 +89,9 @@ main() {
       ;;
   esac
 
+  # Display the container's IP address
+  debug "Container [$role] IP: $(hostname -I)" "$LINENO"
+
   # Execute the passed command
   shift
   debug "Executing passed command: $@" "$LINENO"
