@@ -22,15 +22,15 @@ common_setup() {
   debug "common_setup user=$user" "$LINENO"
   sudo -u "$user" bash -c "
     git config --global pack.threads 0
-    git clone --depth 1 -b develop https://github.com/CUBRID/cubrid-testtools.git $workdir/cubrid-testtools
+    git clone --depth 1 -q --branch develop https://github.com/CUBRID/cubrid-testtools.git $workdir/cubrid-testtools
   "
 
   if [ "$user" == "shell" ]; then
     debug "run_checkout" "$LINENO"
     sudo -u $user bash -c "
       export GITHUB_TOKEN=${GITHUB_TOKEN}
-      git clone --depth 1 -b develop https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases.git $workdir/cubrid-testcases
-      git clone --depth 1 -b develop https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases-private-ex.git $workdir/cubrid-testcases-private-ex
+      git clone --depth 1 -q --branch develop https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases.git $workdir/cubrid-testcases
+      git clone --depth 1 -q --branch develop https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases-private-ex.git $workdir/cubrid-testcases-private-ex
     "
   fi
 }
