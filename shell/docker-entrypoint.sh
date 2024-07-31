@@ -42,7 +42,7 @@ configure() {
   debug "configure user=$user" "$LINENO"
   common_setup "$user"
   sudo -u "$user" bash -c "
-    cat <<EOF >> $workdir/.bash_profile
+    cat <<'EOF' >> $workdir/.bash_profile
 #JAVA ENV
 export JAVA_HOME=/usr/lib/jvm/java-1.8.0
 #CTP ENV
@@ -55,7 +55,7 @@ EOF
 
   if [ "$user" == "shell" ]; then
     sudo -u "$user" bash -c "
-      cat <<EOF >> $workdir/.bash_profile
+      cat <<'EOF' >> $workdir/.bash_profile
 #[shell] ENV
 export init_path=\$CTP_HOME/shell/init_path
 #CUBRID ENV
