@@ -91,6 +91,7 @@ main() {
 
   # Execute the passed command
   shift
+  debug "Executing passed command: $@" "$LINENO"
   exec "$@"
 }
 
