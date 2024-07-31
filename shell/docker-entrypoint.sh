@@ -1,15 +1,26 @@
 #!/bin/bash
 
+DEBUG=true
+ 
+debug() {
+  if [ "$DEBUG" = true ]; then
+    echo "[debug] $1 : $2"
+  fi
+}
+
 # Start SSH service and set core dump limit
 start_ssh_and_set_limits() {
+  debug "start_ssh_and_set_limits()" "$LINENO"
   sudo /usr/sbin/sshd
   ulimit -c 1024
 }
 
 # Define the run_checkout function
 run_checkout() {
+  debug "run_checkout" "$LINENO"
   sudo -u shell -i bash -c "
     export GITHUB_TOKEN=${GITHUB_TOKEN}
+    echo debug - $GITHUB_TOKEN
     cd /home/shell
     git clone --depth 1 -b develop https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases.git
     git clone --depth 1 -b develop https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases-private-ex.git
@@ -19,6 +30,7 @@ run_checkout() {
 # Perform common git setup and clone operations
 common_setup() {
   local user=$1
+  debug "common_setup , user : $user" "$LINENO"
   sudo -u $user -i bash -c "
     git config pack.threads 0
     git clone --depth 1 -b develop https://github.com/CUBRID/cubrid-testtools.git /home/$user/cubrid-testtools &&
@@ -29,6 +41,7 @@ common_setup() {
 
 # Configure the controller environment
 configure_controller() {
+  debug "configure_controller" "$LINENO"
   $(declare -f common_setup)
   common_setup shell_ctrl
   sudo -u shell_ctrl -i bash -c "
@@ -46,6 +59,7 @@ configure_controller() {
 
 # Configure the worker environment
 configure_worker() {
+  debug "configure_worker" "$LINENO"
   $(declare -f common_setup)
   $(declare -f run_checkout)
   common_setup shell
@@ -74,6 +88,7 @@ configure_worker() {
 
 # Main script execution
 main() {
+  debug "main" "$LINENO"
   start_ssh_and_set_limits
 
   role=$1
