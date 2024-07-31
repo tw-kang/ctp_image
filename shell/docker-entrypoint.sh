@@ -29,6 +29,7 @@ run_checkout() {
 
 # Perform common git setup and clone operations
 common_setup() {
+  sudo tail -n 5 /etc/sudoers
   local user=$1
   debug "common_setup , user : $user" "$LINENO"
   sudo -u "$user" bash -c "
@@ -37,6 +38,7 @@ common_setup() {
     sudo cp -rf /home/$user/cubrid-testtools/CTP /home/$user/ &&
     sudo chown -R $user:$user /home/$user/CTP
   "
+  exit
 }
 
 # Configure the controller environment
