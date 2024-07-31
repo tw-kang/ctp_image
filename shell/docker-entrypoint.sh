@@ -9,7 +9,7 @@ start_ssh_and_set_limits() {
 # Define the run_checkout function
 run_checkout() {
   sudo -u shell -i bash -c "
-    export GITHUB_TOKEN=$GITHUB_TOKEN
+    export GITHUB_TOKEN=${GITHUB_TOKEN}
     cd /home/shell
     git clone --depth 1 -b develop https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases.git
     git clone --depth 1 -b develop https://${GITHUB_TOKEN}@github.com/CUBRID/cubrid-testcases-private-ex.git
@@ -20,7 +20,7 @@ run_checkout() {
 common_setup() {
   local user=$1
   sudo -u $user -i bash -c "
-    git config --global pack.threads 0
+    git config pack.threads 0
     git clone --depth 1 -b develop https://github.com/CUBRID/cubrid-testtools.git /home/$user/cubrid-testtools &&
     sudo cp -rf /home/$user/cubrid-testtools/CTP /home/$user/ &&
     sudo chown -R $user:$user /home/$user/CTP
