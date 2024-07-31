@@ -37,7 +37,6 @@ common_setup() {
     sudo cp -rf /home/$user/cubrid-testtools/CTP /home/$user/ &&
     sudo chown -R $user:$user /home/$user/CTP
   "
-  exit
 }
 
 # Configure the controller environment
