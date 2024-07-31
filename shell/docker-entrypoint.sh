@@ -14,16 +14,20 @@ run_checkout() {
 
 # Perform common git setup and clone operations
 common_setup() {
-  git config --global pack.threads 4
-  git clone --depth 1 -b develop https://github.com/CUBRID/cubrid-testtools.git
-  cp -rf ~/cubrid-testtools/CTP ~/
+  local user=$1
+  sudo -u $user -i <<EOF
+    git config --global pack.threads 4
+    git clone --depth 1 -b develop https://github.com/CUBRID/cubrid-testtools.git /home/$user/cubrid-testtools
+    cp -rf /home/$user/cubrid-testtools/CTP /home/$user/
+EOF
 }
 
 # Configure the controller environment
 configure_controller() {
-  sudo -u shell_ctrl -i <<EOF
   $(declare -f common_setup)
-  common_setup
+  common_setup shell_ctrl
+  sudo -u shell_ctrl -i <<EOF
+  cd /home/shell_ctrl
   echo "#JAVA ENV" >> /home/shell_ctrl/.bash_profile
   echo "export JAVA_HOME=/usr/lib/jvm/java-1.8.0" >> /home/shell_ctrl/.bash_profile
   echo "#CTP ENV" >> /home/shell_ctrl/.bash_profile
@@ -37,10 +41,11 @@ EOF
 
 # Configure the worker environment
 configure_worker() {
-  sudo -u shell -i <<EOF
   $(declare -f common_setup)
   $(declare -f run_checkout)
-  common_setup
+  common_setup shell
+  sudo -u shell -i <<EOF
+  cd /home/shell
   run_checkout
   echo "#JAVA ENV" >> /home/shell/.bash_profile
   echo "export JAVA_HOME=/usr/lib/jvm/java-1.8.0" >> /home/shell/.bash_profile
