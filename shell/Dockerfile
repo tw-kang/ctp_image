@@ -20,7 +20,9 @@ RUN ssh-keygen -A && \
     echo 'shell_ctrl ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
     echo 'shell ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
     mkdir -p /home/shell/do_not_delete_core /home/shell/ERROR_BACKUP && \
-    chown -R shell:shell /home/shell/do_not_delete_core /home/shell/ERROR_BACKUP
+    chown -R shell:shell /home/shell/do_not_delete_core /home/shell/ERROR_BACKUP && \
+    ln -sf /usr/share/zoneinfo/Asia/Seoul /etc/localtime && \
+    echo "Asia/Seoul" > /etc/timezone
 
 COPY docker-entrypoint.sh /entrypoint.sh
 RUN chmod 775 /entrypoint.sh
