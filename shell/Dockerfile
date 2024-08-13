@@ -6,7 +6,7 @@ LABEL Description="This is a [shell] test environment image for CUBRID"
 RUN yum install -y epel-release && \
     yum groupinstall -y "Development Tools" && \
     yum install -y net-tools && \
-    yum install -y git vim lsof procps-ng file telnet sudo openssh-server openssh-clients java-1.8.0-openjdk-devel && \
+    yum install -y git vim lsof procps-ng file telnet wget sudo openssh-server openssh-clients java-1.8.0-openjdk-devel && \
     yum install -y dos2unix lcov bc expect && \
     yum clean all && \
     rm -rf /var/cache/yum
