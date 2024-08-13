@@ -4,8 +4,8 @@ LABEL Description="This is a [shell] test environment image for CUBRID"
 
 # Install required packages in a single RUN statement to minimize layers
 RUN yum install -y epel-release && \
-    yum install -y git procps-ng wget which sudo openssh-server openssh-clients java-1.8.0-openjdk-devel && \
-    yum install -y dos2unix lcov bc expect diffutils && \
+    yum install -y git procps-ng diffutils wget which sudo openssh-server openssh-clients java-1.8.0-openjdk-devel && \
+    yum install -y dos2unix lcov bc expect && \
     yum clean all && \
     rm -rf /var/cache/yum
 
