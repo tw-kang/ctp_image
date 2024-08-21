@@ -92,10 +92,16 @@ main() {
   # Display the container's IP address
   debug "Container [$role] IP: $(hostname -I)" "$LINENO"
 
-  # Execute the passed command
+  # Execute the passed command if there is any
   shift
-  debug "Executing passed command: $@" "$LINENO"
-  exec "$@"
+  if [ "$#" -gt 0 ]; then
+    debug "Executing passed command: $@" "$LINENO"
+    exec "$@"
+  else
+    # If no command is passed, keep the container alive
+    debug "No command passed. Keeping the container alive with tail -f /dev/null" "$LINENO"
+    exec tail -f /dev/null
+  fi
 }
 
 main "$@"
