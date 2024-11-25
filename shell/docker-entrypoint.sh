@@ -20,10 +20,14 @@ clone_repository() {
   local repo=$2
   local branch=${3:-develop}
   local token=${4:-}
-  local workdir=/home/$user
   local url="https://${token:+$token@}github.com/CUBRID/$repo.git"
+  local workdir=/home/$user
   
-  sudo -u "$user" git clone --depth 1 -q --branch "$branch" "$url" "$workdir/$repo"
+  if [ -d "$workdir/$repo" ]; then
+    sudo -u "$user" bash -c "cd $workdir/$repo && git fetch origin && git checkout $branch && git pull origin $branch"
+  else
+    sudo -u "$user" git clone --depth 1 -q --branch "$branch" "$url" "$workdir/$repo"
+  fi
 }
 
 # Git configuration and repository cloning
@@ -45,32 +49,36 @@ setup_git_repositories() {
 setup_environment() {
   local user=$1
   local workdir=/home/$user
-  local profile=$workdir/.bash_profile
-  
-  # Set common environment variables
-  sudo -u "$user" cat <<'EOF' >> "$profile"
+  local ctp_home=$workdir/cubrid-testtools/CTP
+  local cubrid_home=$workdir/CUBRID
+
+  debug "configure user=$user" "$LINENO"
+  sudo -u "$user" bash -c "
+    cat <<EOF >> $workdir/.bash_profile
 #JAVA ENV
 export JAVA_HOME=/usr/lib/jvm/java-1.8.0
 #CTP ENV
-export CTP_HOME=$workdir/cubrid-testtools/CTP
-export PATH=$CTP_HOME/bin:$CTP_HOME/common/script:$PATH
+export CTP_HOME=$ctp_home
+export PATH=$ctp_home/bin:$ctp_home/common/script:$PATH
 export CTP_BRANCH_NAME=develop
 export CTP_SKIP_UPDATE=0
 EOF
+  "
 
-  # Set shell user specific environment variables
   if [ "$user" == "shell" ]; then
-    sudo -u "$user" cat <<'EOF' >> "$profile"
+    sudo -u "$user" bash -c "
+      cat <<EOF >> $workdir/.bash_profile
 #[shell] ENV
-export init_path=$CTP_HOME/shell/init_path
+export init_path=$ctp_home/shell/init_path
 #CUBRID ENV
-export CUBRID=$workdir/CUBRID
-export CUBRID_DATABASES=$CUBRID/databases
-export LD_LIBRARY_PATH=$CUBRID/lib:$CUBRID/cci/lib:$LD_LIBRARY_PATH
+export CUBRID=$cubrid_home
+export CUBRID_DATABASES=$cubrid_home/databases
+export LD_LIBRARY_PATH=$cubrid_home/lib:$cubrid_home/cci/lib:$LD_LIBRARY_PATH
 export SHLIB_PATH=$LD_LIBRARY_PATH
 export LIBPATH=$LD_LIBRARY_PATH
-export PATH=$CUBRID/bin:/usr/sbin:$PATH
+export PATH=$cubrid_home/bin:/usr/sbin:$PATH
 EOF
+    "
   fi
 }
 
@@ -80,6 +88,63 @@ configure() {
   debug "configure user=$user" "$LINENO"
   setup_git_repositories "$user"
   setup_environment "$user"
+}
+
+# Function to run tests
+run_test() {
+  debug "run_test()" "$LINENO"
+  local user="shell"
+  local ctp_home="/home/$user/cubrid-testtools/CTP"
+  
+  cd "$ctp_home" && ./bin/ctp.sh shell
+  report_test
+}
+
+# Function to report test results
+report_test() {
+  debug "report_test()" "$LINENO"
+  local user="shell"
+  local ctp_home="/home/$user/cubrid-testtools/CTP"
+  local feedback_file="$ctp_home/result/shell/current_runtime_logs/feedback.log"
+  local test_log="$ctp_home/result/shell/current_runtime_logs/test_local.log"
+  local report_file="$ctp_home/result/shell/current_runtime_logs/failure_report.log"
+  
+  # Remove existing report file if it exists
+  [ -f "$report_file" ] && rm "$report_file"
+
+  # Check if there are any NOK cases
+  if ! grep -q "\[NOK\]:" "$feedback_file"; then
+    echo "All tests completed successfully."
+    return 0
+  fi
+
+  # Extract and print information about NOK cases
+  while IFS= read -r nok_line; do
+    {
+      echo "=== Failed Test Case Information ==="
+      echo "$nok_line"
+      
+      # Extract test case path
+      local test_case=$(echo "$nok_line" | awk '{print $2}')
+      local escaped_test_case=$(echo "$test_case" | sed 's/[\/]/\\\//g')
+      
+      # Print execution log for the test case
+      echo "=== Test Execution Detailed Log ==="
+      awk -v tc="$escaped_test_case" '
+        /\[TESTCASE\] '"$escaped_test_case"'/ {
+          f=1
+          next
+        }
+        /\[TESTCASE\]/ {
+          if(f==1) f=0
+        }
+        f==1 && /\[INFO\] TEST START/,/\[INFO\] TEST STOP/ {
+          print
+        }
+      ' "$test_log"
+      echo "================================"
+    } >> "$report_file"
+  done < <(grep "\[NOK\]:" "$feedback_file")
 }
 
 # Main execution function
@@ -95,8 +160,11 @@ main() {
     worker)
       configure "shell"
       ;;
+    test)
+      run_test
+      ;;
     *)
-      echo "Unknown role: $role. Use 'controller' or 'worker'."
+      echo "Unknown role: $role. Use 'controller', 'worker' or 'test'."
       exit 1
       ;;
   esac
