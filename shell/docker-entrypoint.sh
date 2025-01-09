@@ -14,19 +14,36 @@ start_ssh_and_set_limits() {
   ulimit -c 1024
 }
 
-# Function to clone Git repository
+# Function to clone Git repository with sparse checkout
 clone_repository() {
   local user=$1
   local repo=$2
   local branch=${3:-develop}
   local token=${4:-}
-  local url="https://${token:+$token@}github.com/CUBRID/$repo.git"
+  local sparse_dir=${5:-}
+  #local url="https://${token:+$token@}github.com/CUBRID/$repo.git"
+  local url="https://${token:+$token@}github.com/tw-kang/$repo.git"
   local workdir=/home/$user
   
   if [ -d "$workdir/$repo" ]; then
     sudo -u "$user" bash -c "cd $workdir/$repo && git fetch origin && git checkout $branch && git pull origin $branch"
   else
-    sudo -u "$user" git clone --depth 1 -q --branch "$branch" "$url" "$workdir/$repo"
+    if [ -n "$sparse_dir" ]; then
+      # Sparse checkout
+      sudo -u "$user" bash -c "
+        mkdir -p $workdir/$repo &&
+        cd $workdir/$repo &&
+        git init &&
+        git remote add origin $url &&
+        git config core.sparseCheckout true &&
+        echo '$sparse_dir/*' > .git/info/sparse-checkout &&
+        git fetch --depth 1 origin $branch &&
+        git checkout $branch
+      "
+    else
+      # full clone
+      sudo -u "$user" git clone --depth 1 -q --branch "$branch" "$url" "$workdir/$repo"
+    fi
   fi
 }
 
@@ -41,7 +58,13 @@ setup_git_repositories() {
   if [ "$user" == "shell" ]; then
     debug "cloning private repositories" "$LINENO"
     clone_repository "$user" "cubrid-testcases" "develop" "${GITHUB_TOKEN}"
-    clone_repository "$user" "cubrid-testcases-private-ex" "develop" "${GITHUB_TOKEN}"
+    clone_repository "$user" "cubrid-testcases-private-ex" "develop" "${GITHUB_TOKEN}" "shell"
+    # test code
+    debug "remove testcase directories" "$LINENO"
+    sudo -u "$user" bash -c "
+      cd /home/$user/cubrid-testcases-private-ex/shell && \
+      find . -maxdepth 1 -type d ! -name '.' ! -name '_01_utility' ! -name 'config' -exec rm -rf {} \;
+    "
   fi
 }
 
@@ -96,7 +119,7 @@ run_test() {
   local user="shell"
   local ctp_home="/home/$user/cubrid-testtools/CTP"
   
-  cd "$ctp_home" && ./bin/ctp.sh shell
+  su $user -c "cd '$ctp_home' && ./bin/ctp.sh shell"
   report_test
 }
 
@@ -109,6 +132,7 @@ report_test() {
   local test_log="$ctp_home/result/shell/current_runtime_logs/test_local.log"
   local report_file="$ctp_home/result/shell/current_runtime_logs/failure_report.log"
   
+  # need to fix
   # Remove existing report file if it exists
   [ -f "$report_file" ] && rm "$report_file"
 
