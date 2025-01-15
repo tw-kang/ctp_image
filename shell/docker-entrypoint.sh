@@ -11,7 +11,7 @@ debug() {
 start_ssh_and_set_limits() {
   debug "start_ssh_and_set_limits()" "$LINENO"
   sudo /usr/sbin/sshd
-  ulimit -c 1024
+  # ulimit -c 1024
 }
 
 # Function to clone Git repository with sparse checkout
@@ -48,9 +48,9 @@ clone_repository() {
 }
 
 # Git configuration and repository cloning
-setup_git_repositories() {
+run_checkout() {
   local user=$1
-  debug "setup_git_repositories user=$user" "$LINENO"
+  debug "run_checkout user=$user" "$LINENO"
   
   sudo -u "$user" git config --global pack.threads 0
   clone_repository "$user" "cubrid-testtools"
@@ -64,12 +64,14 @@ setup_git_repositories() {
     sudo -u "$user" bash -c "
       cd /home/$user/cubrid-testcases-private-ex/shell && \
       find . -maxdepth 1 -type d ! -name '.' ! -name '_01_utility' ! -name 'config' -exec rm -rf {} \;
+      cd _01_utility && \
+      find . -maxdepth 1 -type d ! -name "." ! -name '_03_start_server' -exec rm -rf {} \;
     "
   fi
 }
 
 # Function to set up environment variables
-setup_environment() {
+configure() {
   local user=$1
   local workdir=/home/$user
   local ctp_home=$workdir/cubrid-testtools/CTP
@@ -105,70 +107,85 @@ EOF
   fi
 }
 
-# Function to configure environment
-configure() {
-  local user=$1
-  debug "configure user=$user" "$LINENO"
-  setup_git_repositories "$user"
-  setup_environment "$user"
-}
-
 # Function to run tests
 run_test() {
   debug "run_test()" "$LINENO"
   local user="shell"
   local ctp_home="/home/$user/cubrid-testtools/CTP"
   
-  su $user -c "cd '$ctp_home' && ./bin/ctp.sh shell"
-  report_test
+  # su $user -c "cd '$ctp_home' && ./bin/ctp.sh shell"
+  # report_test $TEST_REPORT $ctp_home/result/shell/current_runtime_logs
+  report_test /tmp/log $ctp_home/result/shell/current_runtime_logs
 }
 
 # Function to report test results
 report_test() {
   debug "report_test()" "$LINENO"
-  local user="shell"
-  local ctp_home="/home/$user/cubrid-testtools/CTP"
-  local feedback_file="$ctp_home/result/shell/current_runtime_logs/feedback.log"
-  local test_log="$ctp_home/result/shell/current_runtime_logs/test_local.log"
-  local report_file="$ctp_home/result/shell/current_runtime_logs/failure_report.log"
+  local xml_output=$1
+  local result_dir=$2
+  #feedback.log : Records the test result for each case, and the result summary.
+  local feedback_file="$result_dir/feedback.log"
+  #test_status.data : summary for test result.
+  local test_status="$result_dir/test_status.data"
+  #test_local.log : Records the screen output of CTP tool. It contains the sceen output of each test case.
+  local test_log="$result_dir/test_local.log"
+  # failure_report.log :report file for ci
+  local report_file="$result_dir/failure_report.log"
   
-  # need to fix
-  # Remove existing report file if it exists
-  [ -f "$report_file" ] && rm "$report_file"
-
-  # Check if there are any NOK cases
-  if ! grep -q "\[NOK\]:" "$feedback_file"; then
-    echo "All tests completed successfully."
-    return 0
+  if [ ! -d "$result_dir" ]; then
+    debug "$result_dir not found" "$LINENO"
+    echo "$result_dir not found"
+    return 1
+  fi
+  
+  if [ ! -f "$test_status" ]; then
+    debug "$test_status not found" "$LINENO"
+    return 1
   fi
 
-  # Extract and print information about NOK cases
-  while IFS= read -r nok_line; do
-    {
-      echo "=== Failed Test Case Information ==="
-      echo "$nok_line"
-      
-      # Extract test case path
-      local test_case=$(echo "$nok_line" | awk '{print $2}')
-      local escaped_test_case=$(echo "$test_case" | sed 's/[\/]/\\\//g')
-      
-      # Print execution log for the test case
-      echo "=== Test Execution Detailed Log ==="
-      awk -v tc="$escaped_test_case" '
-        /\[TESTCASE\] '"$escaped_test_case"'/ {
-          f=1
-          next
-        }
-        /\[TESTCASE\]/ {
-          if(f==1) f=0
-        }
-        f==1 && /\[INFO\] TEST START/,/\[INFO\] TEST STOP/ {
-          print
-        }
-      ' "$test_log"
-      echo "================================"
-    } >> "$report_file"
-  done < <(grep "\[NOK\]:" "$feedback_file")
+  if [ ! -d "$xml_output" ]; then
+    mkdir -p "$xml_output"
+  fi
+
+   # for test result collection
+    local test_category=""
+    local total_cases=""
+    local total_execution=""
+    local total_success=""
+    local total_fail=""
+    local total_skip=""
+
+    # for test case information collection
+    local TMP_CASES=$(mktemp)
+   
+  while IFS='=' read -r key value; do
+    case "$key" in
+      "total_case_count")
+        total_cases="$value"
+        ;;
+      "total_executed_case_count")
+        total_execution="$value"
+        ;;
+      "total_success_case_count")
+        total_success="$value"
+        ;;
+      "total_fail_case_count")
+        total_fail="$value"
+        ;;
+      "total_skip_case_count")
+        total_skip="$value"
+        ;;
+    esac
+  done < <(grep -v '^#' "$test_status")
+  
+  #need to check.
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^\[OK\]|^\[NOK\]|^\[SKIP_BY_BUG\]|:\ (OK|NOK|SKIP)$ ]]; then
+      echo "$line" >> "$TMP_CASES"
+    fi
+  done < "$feedback_file"
+cat $TMP_CASES
+  debug "TMP_CASES: $TMP_CASES" "$LINENO"
 }
 
 # Main execution function
@@ -183,6 +200,9 @@ main() {
       ;;
     worker)
       configure "shell"
+      ;;
+    checkout)
+      run_checkout "shell"
       ;;
     test)
       run_test
