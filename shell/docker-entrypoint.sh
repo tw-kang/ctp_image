@@ -208,7 +208,7 @@ main() {
       run_test
       ;;
     *)
-      echo "Unknown role: $role. Use 'controller', 'worker' or 'test'."
+      echo "Unknown role: $role. Use 'controller', 'worker' 'checkout' or 'test'."
       exit 1
       ;;
   esac
