@@ -7,11 +7,38 @@ debug() {
   [ "$DEBUG" = true ] && echo "[debug] $1 : $2"
 }
 
-# Start SSH service and set core dump limits
-start_ssh_and_set_limits() {
-  debug "start_ssh_and_set_limits()" "$LINENO"
+# Initialize system configuration including SSH, users, and environment
+init_system() {
+  debug "init_system()" "$LINENO"
+
+  dnf install -y coreutils shadow sudo openssh
+  dnf clean all
+exit
+  # Setup SSH configuration
+  ssh-keygen -A
+  # sed -i 's/^account.*pam_nologin.so/#&/' /etc/pam.d/sshd
+  # mkdir -p /var/run/sshd
+  
+  # Setup users and their home directories
+  useradd -ms /bin/bash shell_ctrl
+  useradd -ms /bin/bash shell
+  echo 'shell_ctrl:shell_ctrl' | chpasswd
+  echo 'shell:shell' | chpasswd
+  
+  # Setup sudo permissions
+  echo 'shell_ctrl ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+  echo 'shell ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+  
+  # Setup directories and permissions
+  mkdir -p /home/shell/do_not_delete_core /home/shell/ERROR_BACKUP
+  chown -R shell:shell /home/shell/do_not_delete_core /home/shell/ERROR_BACKUP
+  
+  # Setup timezone
+  ln -sf /usr/share/zoneinfo/Asia/Seoul /etc/localtime
+  echo "Asia/Seoul" > /etc/timezone
+  
+  # Start SSH daemon
   sudo /usr/sbin/sshd
-  # ulimit -c 1024
 }
 
 # Function to clone Git repository with sparse checkout
@@ -191,7 +218,7 @@ cat $TMP_CASES
 # Main execution function
 main() {
   debug "main" "$LINENO"
-  start_ssh_and_set_limits
+  init_system
 
   local role=$1
   case "$role" in
