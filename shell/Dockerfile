@@ -2,16 +2,40 @@ FROM rockylinux:8
 
 LABEL Description="This is a [shell] test environment image for CUBRID"
 
-# Install required packages in a single RUN statement to minimize layers
-RUN yum install -y epel-release && \
-    yum groupinstall -y "Development Tools" && \
-    yum install -y net-tools && \
-    yum install -y git vim lsof procps-ng file telnet wget sudo openssh-server openssh-clients java-1.8.0-openjdk-devel && \
-    yum install -y dos2unix lcov bc expect && \
-    yum clean all && \
-    rm -rf /var/cache/yum
+# Install only necessary packages and clean up in the same layer to reduce image size
+RUN dnf install -y epel-release && \
+    dnf install -y --setopt=install_weak_deps=False \
+    # Build and Development tools
+    gcc-c++ \
+    git \
+    # System utilities
+    vim-minimal \
+    lsof \
+    procps-ng \
+    file \
+    diffutils \
+    which \
+    # Network tools
+    net-tools \
+    telnet \
+    wget \
+    # System access and security
+    sudo \
+    openssh-server \
+    openssh-clients \
+    # Java runtime
+    java-1.8.0-openjdk-devel \
+    # Test utilities
+    dos2unix \
+    lcov \
+    bc \
+    expect && \
+    dnf clean all && \
+    rm -rf /var/cache/dnf/* && \
+    rm -rf /var/tmp/* && \
+    rm -rf /tmp/*
 
-# SSH setup and user configuration
+# SSH setup and user configuration in a single layer
 RUN ssh-keygen -A && \
     sed -i 's/^account.*pam_nologin.so/#&/' /etc/pam.d/sshd && \
     mkdir -p /var/run/sshd && \
@@ -30,8 +54,8 @@ COPY docker-entrypoint.sh /entrypoint.sh
 RUN chmod 775 /entrypoint.sh
 
 # Set up environment variables
-ENV JAVA_HOME=/usr/lib/jvm/java-1.8.0
-ENV CTP_BRANCH_NAME=develop
-ENV CTP_SKIP_UPDATE=0
+ENV JAVA_HOME=/usr/lib/jvm/java-1.8.0 \
+    CTP_BRANCH_NAME=develop \
+    CTP_SKIP_UPDATE=0
 
 ENTRYPOINT ["/entrypoint.sh"]
