@@ -11,7 +11,7 @@ debug() {
 start_ssh_and_set_limits() {
   debug "start_ssh_and_set_limits()" "$LINENO"
   sudo /usr/sbin/sshd
-  # ulimit -c 1024
+  ulimit -c 1
 }
 
 # Function to clone Git repository with sparse checkout
@@ -123,69 +123,123 @@ report_test() {
   debug "report_test()" "$LINENO"
   local xml_output=$1
   local result_dir=$2
-  #feedback.log : Records the test result for each case, and the result summary.
   local feedback_file="$result_dir/feedback.log"
-  #test_status.data : summary for test result.
-  local test_status="$result_dir/test_status.data"
-  #test_local.log : Records the screen output of CTP tool. It contains the sceen output of each test case.
-  local test_log="$result_dir/test_local.log"
-  # failure_report.log :report file for ci
-  local report_file="$result_dir/failure_report.log"
+  local xml_file="$xml_output/TEST-shell.xml"
+  local github_base_url="https://github.com/CUBRID/cubrid-testcases-private-ex/blob/develop"
+  local test_base_dir="/home/shell"
   
-  if [ ! -d "$result_dir" ]; then
-    debug "$result_dir not found" "$LINENO"
-    echo "$result_dir not found"
-    return 1
-  fi
-  
-  if [ ! -f "$test_status" ]; then
-    debug "$test_status not found" "$LINENO"
+  # Validate input
+  if [ ! -f "$feedback_file" ]; then
+    debug "feedback.log not found in $result_dir" "$LINENO"
     return 1
   fi
 
-  if [ ! -d "$xml_output" ]; then
-    mkdir -p "$xml_output"
-  fi
+  # Prepare output directory and file
+  mkdir -p "$xml_output"
+  rm -f "$xml_file"
 
-   # for test result collection
-    local test_category=""
-    local total_cases=""
-    local total_execution=""
-    local total_success=""
-    local total_fail=""
-    local total_skip=""
+  # Initialize XML file
+  cat > "$xml_file" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="shell">
+EOF
 
-    # for test case information collection
-    local TMP_CASES=$(mktemp)
-   
-  while IFS='=' read -r key value; do
-    case "$key" in
-      "total_case_count")
-        total_cases="$value"
+  # Test case tracking variables
+  local current_test=""
+  local current_time=""
+  local console_output=""
+  local in_console_section=false
+  local test_result=""
+
+  # Process feedback.log line by line
+  while IFS= read -r line; do
+    case "$line" in
+      # Match NOK test case start
+      *"[NOK]:"*)
+        # Write previous test case if exists
+        if [ -n "$current_test" ] && [ -n "$current_time" ]; then
+          # Remove duplicate prefix for GitHub link
+          local github_path=$(echo "$current_test" | sed 's/cubrid-testcases-private-ex\/shell/shell/')
+          local github_link="$github_base_url/$github_path"
+          cat >> "$xml_file" << EOF
+    <testcase name="$current_test" time="$current_time">
+      <failure message="Test failed - $github_link"><![CDATA[$test_result
+
+============================= CONSOLE OUTPUT =============================
+$console_output]]></failure>
+    </testcase>
+EOF
+        fi
+        
+        # Extract new test case information
+        current_test=$(echo "$line" | sed -n 's/.*\[NOK\]:.*\(cubrid-testcases-private-ex\/shell\/.*\.sh\).*/\1/p')
+        # Get result file path with absolute path
+        local result_file_path="$test_base_dir/$current_test"
+        result_file_path="${result_file_path%.sh}.result"
+        
+        debug "Looking for result file: $result_file_path" "$LINENO"
+        if [ -f "$result_file_path" ]; then
+          test_result=$(cat "$result_file_path")
+          debug "Found result file. Content length: ${#test_result}" "$LINENO"
+        else
+          test_result="$line"
+          debug "Result file not found. Using log line instead." "$LINENO"
+        fi
+        current_time=""
+        console_output=""
+        in_console_section=false
         ;;
-      "total_executed_case_count")
-        total_execution="$value"
+      
+      # Match execution time
+      *"----"*"time="*)
+        if [ -n "$current_test" ]; then
+          current_time=$(echo "$line" | sed -n 's/.*time=\([0-9]*\).*/\1/p')
+        fi
         ;;
-      "total_success_case_count")
-        total_success="$value"
+      
+      # Match console output section start
+      *"============================= CONSOLE OUTPUT ============================="*)
+        in_console_section=true
         ;;
-      "total_fail_case_count")
-        total_fail="$value"
+      
+      # Match section end markers
+      *"[TEST STOP]"* | *"[INFO] TEST STOP"*)
+        console_output+="$line"$'\n'
+        in_console_section=false
         ;;
-      "total_skip_case_count")
-        total_skip="$value"
+      
+      # Collect console output
+      *)
+        if [ "$in_console_section" = true ] && [ -n "$current_test" ]; then
+          console_output+="$line"$'\n'
+        fi
         ;;
     esac
-  done < <(grep -v '^#' "$test_status")
-  
-  #need to check.
-  while IFS= read -r line; do
-    if [[ "$line" =~ ^\[OK\]|^\[NOK\]|^\[SKIP_BY_BUG\]|:\ (OK|NOK|SKIP)$ ]]; then
-      echo "$line" >> "$TMP_CASES"
-    fi
   done < "$feedback_file"
-cat $TMP_CASES
-  debug "TMP_CASES: $TMP_CASES" "$LINENO"
+
+  # Write the last test case if exists
+  if [ -n "$current_test" ] && [ -n "$current_time" ]; then
+    # Remove duplicate prefix for GitHub link
+    local github_path=$(echo "$current_test" | sed 's/cubrid-testcases-private-ex\/shell/shell/')
+    local github_link="$github_base_url/$github_path"
+    cat >> "$xml_file" << EOF
+    <testcase name="$current_test" time="$current_time">
+      <failure message="Test failed - $github_link"><![CDATA[$test_result
+
+============================= CONSOLE OUTPUT =============================
+$console_output]]></failure>
+    </testcase>
+EOF
+  fi
+
+  # Close XML file
+  cat >> "$xml_file" << EOF
+  </testsuite>
+</testsuites>
+EOF
+
+  debug "JUnit XML generated: $xml_file" "$LINENO"
 }
 
 # Main execution function
