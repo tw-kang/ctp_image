@@ -64,8 +64,6 @@ run_checkout() {
     sudo -u "$user" bash -c "
       cd /home/$user/cubrid-testcases-private-ex/shell && \
       find . -maxdepth 1 -type d ! -name '.' ! -name '_01_utility' ! -name 'config' -exec rm -rf {} \;
-      cd _01_utility && \
-      find . -maxdepth 1 -type d ! -name "." ! -name '_03_start_server' -exec rm -rf {} \;
     "
   fi
 }
@@ -146,98 +144,95 @@ report_test() {
 EOF
 
   # Test case tracking variables
-  local current_test=""
-  local current_time=""
-  local console_output=""
-  local in_console_section=false
+  local in_log_section=false
+  local in_task_section=false
+  local test_name=""
+  local test_time=""
+  local timeout=false
   local test_result=""
+  local failure_message=""
+  local github_path=""
+  local github_link=""
 
   # Process feedback.log line by line
   while IFS= read -r line; do
     case "$line" in
-      # Match NOK test case start
-      *"[NOK]:"*)
-        # Write previous test case if exists
-        if [ -n "$current_test" ] && [ -n "$current_time" ]; then
-          # Remove duplicate prefix for GitHub link
-          local github_path=$(echo "$current_test" | sed 's/cubrid-testcases-private-ex\/shell/shell/')
-          local github_link="$github_base_url/$github_path"
-          cat >> "$xml_file" << EOF
-    <testcase name="$current_test" time="$current_time">
-      <failure message="Test failed - $github_link"><![CDATA[$test_result
+      # Initialize XML file
+      "[TASK START]"*)
+        debug "$line" "$LINENO"
+        in_task_section=true
+        cat > "$xml_file" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="shell">
+EOF
+        ;;
 
-============================= CONSOLE OUTPUT =============================
-$console_output]]></failure>
+      # Match NOK test case start
+      "[NOK]:"*)
+        debug "$line" "$LINENO"
+        in_log_section=true
+        test_name=$(echo "$line" | sed -n 's/.*\[NOK\]:.*\(cubrid-testcases-private-ex\/shell\/.*\.sh\).*/\1/p')
+        github_path=$(echo "$test_name" | sed 's/cubrid-testcases-private-ex\/shell/shell/')
+        github_link="$github_base_url/$github_path"
+        ;;
+
+      *": NOK timeout"*)
+        timeout=true
+        test_result+="$line"$'\n'
+        ;;  
+      
+      # Match execution time
+      [0-9][0-9]:[0-9][0-9]:[0-9][0-9]*"time="*)
+        if [ "$in_log_section" = true ]; then
+          test_time=$(echo "$line" | sed -n 's/.*time=\([0-9]*\).*/\1/p')
+        fi
+        ;;
+            
+      # Match section end markers
+      "[INFO] TEST STOP"*)
+        debug "$line" "$LINENO"
+        if [ -n "$test_name" ] && [ "$in_log_section" = true ]; then
+          if [ "$timeout" = true ]; then
+            failure_message="Test failed (timeout)"
+          else
+            failure_message="Test failed"
+          fi
+          cat >> "$xml_file" << EOF
+    <testcase name="$test_name" time="$test_time">
+      <failure message="$failure_message - $github_link"><![CDATA[
+      $test_result
+      ]]></failure>
     </testcase>
 EOF
         fi
-        
-        # Extract new test case information
-        current_test=$(echo "$line" | sed -n 's/.*\[NOK\]:.*\(cubrid-testcases-private-ex\/shell\/.*\.sh\).*/\1/p')
-        # Get result file path with absolute path
-        local result_file_path="$test_base_dir/$current_test"
-        result_file_path="${result_file_path%.sh}.result"
-        
-        debug "Looking for result file: $result_file_path" "$LINENO"
-        if [ -f "$result_file_path" ]; then
-          test_result=$(cat "$result_file_path")
-          debug "Found result file. Content length: ${#test_result}" "$LINENO"
-        else
-          test_result="$line"
-          debug "Result file not found. Using log line instead." "$LINENO"
-        fi
-        current_time=""
-        console_output=""
-        in_console_section=false
+
+        in_log_section=false
+        timeout=false
+        test_result=""
+        test_name=""
+        test_time=""
         ;;
       
-      # Match execution time
-      *"----"*"time="*)
-        if [ -n "$current_test" ]; then
-          current_time=$(echo "$line" | sed -n 's/.*time=\([0-9]*\).*/\1/p')
-        fi
+      "[TEST STOP]"*)
+        debug "$line" "$LINENO"
+        in_task_section=false
+        # Close XML file
+        cat >> "$xml_file" << EOF
+  </testsuite>
+</testsuites>
+EOF
+        break
         ;;
-      
-      # Match console output section start
-      *"============================= CONSOLE OUTPUT ============================="*)
-        in_console_section=true
-        ;;
-      
-      # Match section end markers
-      *"[TEST STOP]"* | *"[INFO] TEST STOP"*)
-        console_output+="$line"$'\n'
-        in_console_section=false
-        ;;
-      
+
       # Collect console output
       *)
-        if [ "$in_console_section" = true ] && [ -n "$current_test" ]; then
-          console_output+="$line"$'\n'
+        if [ -n "$test_name" ] && [ "$in_log_section" = true ]; then
+          test_result+="$line"$'\n'
         fi
         ;;
     esac
   done < "$feedback_file"
-
-  # Write the last test case if exists
-  if [ -n "$current_test" ] && [ -n "$current_time" ]; then
-    # Remove duplicate prefix for GitHub link
-    local github_path=$(echo "$current_test" | sed 's/cubrid-testcases-private-ex\/shell/shell/')
-    local github_link="$github_base_url/$github_path"
-    cat >> "$xml_file" << EOF
-    <testcase name="$current_test" time="$current_time">
-      <failure message="Test failed - $github_link"><![CDATA[$test_result
-
-============================= CONSOLE OUTPUT =============================
-$console_output]]></failure>
-    </testcase>
-EOF
-  fi
-
-  # Close XML file
-  cat >> "$xml_file" << EOF
-  </testsuite>
-</testsuites>
-EOF
 
   debug "JUnit XML generated: $xml_file" "$LINENO"
 }
