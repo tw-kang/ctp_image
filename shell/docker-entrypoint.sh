@@ -124,7 +124,6 @@ report_test() {
   local feedback_file="$result_dir/feedback.log"
   local xml_file="$xml_output/TEST-shell.xml"
   local github_base_url="https://github.com/CUBRID/cubrid-testcases-private-ex/blob/develop"
-  local test_base_dir="/home/shell"
   
   # Validate input
   if [ ! -f "$feedback_file" ]; then
@@ -134,9 +133,8 @@ report_test() {
 
   # Prepare output directory and file
   mkdir -p "$xml_output"
-  rm -f "$xml_file"
-
-  # Initialize XML file
+  
+  # Initialize XML file with header
   cat > "$xml_file" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
@@ -144,80 +142,53 @@ report_test() {
 EOF
 
   # Test case tracking variables
-  local in_log_section=false
-  local in_task_section=false
   local test_name=""
   local test_time=""
-  local timeout=false
   local test_result=""
-  local failure_message=""
-  local github_path=""
-  local github_link=""
-
+  local is_timeout=false
+  
   # Process feedback.log line by line
   while IFS= read -r line; do
     case "$line" in
-      # Initialize XML file
-      "[TASK START]"*)
-        debug "$line" "$LINENO"
-        in_task_section=true
-        cat > "$xml_file" << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuites>
-  <testsuite name="shell">
-EOF
-        ;;
-
-      # Match NOK test case start
       "[NOK]:"*)
-        debug "$line" "$LINENO"
-        in_log_section=true
+        # New test case found - reset variables
         test_name=$(echo "$line" | sed -n 's/.*\[NOK\]:.*\(cubrid-testcases-private-ex\/shell\/.*\.sh\).*/\1/p')
-        github_path=$(echo "$test_name" | sed 's/cubrid-testcases-private-ex\/shell/shell/')
-        github_link="$github_base_url/$github_path"
+        test_time=""
+        test_result=""
+        is_timeout=false
         ;;
 
       *": NOK timeout"*)
-        timeout=true
+        is_timeout=true
         test_result+="$line"$'\n'
         ;;  
       
-      # Match execution time
       [0-9][0-9]:[0-9][0-9]:[0-9][0-9]*"time="*)
-        if [ "$in_log_section" = true ]; then
-          test_time=$(echo "$line" | sed -n 's/.*time=\([0-9]*\).*/\1/p')
-        fi
+        [ -n "$test_name" ] && test_time=$(echo "$line" | sed -n 's/.*time=\([0-9]*\).*/\1/p')
         ;;
             
-      # Match section end markers
       "[INFO] TEST STOP"*)
-        debug "$line" "$LINENO"
-        if [ -n "$test_name" ] && [ "$in_log_section" = true ]; then
-          if [ "$timeout" = true ]; then
-            failure_message="Test failed (timeout)"
-          else
-            failure_message="Test failed"
-          fi
+        if [ -n "$test_name" ] && [ -n "$test_time" ]; then
+          local failure_msg="Test failed"
+          [ "$is_timeout" = true ] && failure_msg="Test failed (timeout)"
+          local github_link="$github_base_url/$(echo "$test_name" | sed 's/cubrid-testcases-private-ex\/shell/shell/')"
+          
           cat >> "$xml_file" << EOF
     <testcase name="$test_name" time="$test_time">
-      <failure message="$failure_message - $github_link"><![CDATA[
+      <failure message="$failure_msg - $github_link"><![CDATA[
       $test_result
       ]]></failure>
     </testcase>
 EOF
+          # Reset variables for next test
+          test_name=""
+          test_time=""
+          test_result=""
         fi
-
-        in_log_section=false
-        timeout=false
-        test_result=""
-        test_name=""
-        test_time=""
         ;;
       
       "[TEST STOP]"*)
-        debug "$line" "$LINENO"
-        in_task_section=false
-        # Close XML file
+        # Close XML file and exit loop
         cat >> "$xml_file" << EOF
   </testsuite>
 </testsuites>
@@ -225,11 +196,9 @@ EOF
         break
         ;;
 
-      # Collect console output
       *)
-        if [ -n "$test_name" ] && [ "$in_log_section" = true ]; then
-          test_result+="$line"$'\n'
-        fi
+        # Collect console output only if we're processing a test case
+        [ -n "$test_name" ] && test_result+="$line"$'\n'
         ;;
     esac
   done < "$feedback_file"
