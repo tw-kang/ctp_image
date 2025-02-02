@@ -123,13 +123,25 @@ report_test() {
   local result_dir=$2
   local feedback_file="$result_dir/feedback.log"
   local xml_file="$xml_output/TEST-shell.xml"
-  local github_base_url="https://github.com/CUBRID/cubrid-testcases-private-ex/blob/develop"
-  
+  # local testcases_root_dir="/home/shell/cubrid-testcases-private-ex"
+  # local testcases_remote_url=$(cd $testcases_root_dir && git config --get remote.origin.url)
+  # local testcases_hash=$(cd $testcases_root_dir && git rev-parse HEAD)
+  # local testcases_base_url="${testcases_remote_url%.git}/blob/$testcases_hash"
+
   # Validate input
   if [ ! -f "$feedback_file" ]; then
     debug "feedback.log not found in $result_dir" "$LINENO"
     return 1
   fi
+
+  # Get test summary from feedback.log
+  local test_category=$(tail -n 10 "$feedback_file" | grep "Test Category:" | awk -F':' '{print $2}')
+  local total_case_count=$(tail -n 10 "$feedback_file" | grep "Total Case:" | awk -F':' '{print $2}')
+  local total_execution_count=$(tail -n 10 "$feedback_file" | grep "Total Execution Case:" | awk -F':' '{print $2}')
+  local total_success_case_count=$(tail -n 10 "$feedback_file" | grep "Total Success Case:" | awk -F':' '{print $2}')
+  local total_fail_case_count=$(tail -n 10 "$feedback_file" | grep "Total Fail Case:" | awk -F':' '{print $2}')
+  local total_skip_case_count=$(tail -n 10 "$feedback_file" | grep "Total Skip Case:" | awk -F':' '{print $2}')
+  local elapse_time=$(tail -n 10 "$feedback_file" | grep "Elapse Time:" | awk -F':' '{print $2}')
 
   # Prepare output directory and file
   mkdir -p "$xml_output"
@@ -138,7 +150,7 @@ report_test() {
   cat > "$xml_file" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
-  <testsuite name="shell">
+  <testsuite name="$test_category" tests="$total_case_count" failures="$total_fail_case_count" skipped="$total_skip_case_count" time="$elapse_time">
 EOF
 
   # Test case tracking variables
@@ -146,16 +158,49 @@ EOF
   local test_time=""
   local test_result=""
   local is_timeout=false
+  # Define test status constants
+  local -r TEST_STATUS_OK="[OK]"
+  local -r TEST_STATUS_NOK="[NOK]" 
+  local -r TEST_STATUS_SKIP_MACRO="[SKIP_BY_MACRO]"
+  local -r TEST_STATUS_SKIP_BUG="[SKIP_BY_BUG]"
+  local -r TEST_STATUS_UNKNOWN="[UNKNOWN]"
+  local test_status="$TEST_STATUS_UNKNOWN"
   
   # Process feedback.log line by line
   while IFS= read -r line; do
     case "$line" in
-      "[NOK]:"*)
-        # New test case found - reset variables
+    #xml 파일에 ok, skip 인경우도 포함해야함
+    #xml 표준에 맞춰 작성필요.
+      "$TEST_STATUS_OK"*)
+        test_name=$(echo "$line" | sed -n 's/.*\[OK\]:.*\(cubrid-testcases-private-ex\/shell\/.*\.sh\).*/\1/p')
+        test_time=""
+        test_result=""
+        test_status="$TEST_STATUS_OK"
+        ;;
+
+      "$TEST_STATUS_SKIP_BUG"*)
+        test_name=$(echo "$line" | sed -n 's/.*\[SKIP_BY_BUG\].*\(cubrid-testcases-private-ex\/shell\/.*\.sh\).*/\1/p')
+        test_time="0"
+        test_result=""
+        test_status="$TEST_STATUS_SKIP_BUG"
+        cat >> "$xml_file" << EOF
+    <testcase name="$test_name" time="$test_time">
+      <skipped message="$test_status"/>
+    </testcase>
+EOF
+         # Reset variables for next test
+          test_name=""
+          test_time=""
+          test_result=""
+          test_status="$TEST_STATUS_UNKNOWN"
+        ;;
+
+      "$TEST_STATUS_NOK":*)
         test_name=$(echo "$line" | sed -n 's/.*\[NOK\]:.*\(cubrid-testcases-private-ex\/shell\/.*\.sh\).*/\1/p')
         test_time=""
         test_result=""
         is_timeout=false
+        test_status="$TEST_STATUS_NOK"
         ;;
 
       *": NOK timeout"*)
@@ -164,20 +209,32 @@ EOF
         ;;  
       
       [0-9][0-9]:[0-9][0-9]:[0-9][0-9]*"time="*)
-        [ -n "$test_name" ] && test_time=$(echo "$line" | sed -n 's/.*time=\([0-9]*\).*/\1/p')
-        ;;
+          [ -n "$test_name" ] && test_time=$(echo "$line" | sed -n 's/.*time=\([0-9]*\).*/\1/p')
+
+          if [ "$test_status" == "$TEST_STATUS_OK" ]; then
+              cat >> "$xml_file" << EOF
+    <testcase name="$test_name" time="$test_time"/>
+EOF
+         # Reset variables for next test
+          test_name=""
+          test_time=""
+          test_result=""
+          test_status="$TEST_STATUS_UNKNOWN"
+          fi
+
+          ;;
             
       "[INFO] TEST STOP"*)
         if [ -n "$test_name" ] && [ -n "$test_time" ]; then
           local failure_msg="Test failed"
           [ "$is_timeout" = true ] && failure_msg="Test failed (timeout)"
-          local github_link="$github_base_url/$(echo "$test_name" | sed 's/cubrid-testcases-private-ex\/shell/shell/')"
+          local github_link="$testcases_base_url/$(echo "$test_name" | sed 's/cubrid-testcases-private-ex\/shell/shell/')"
           
           cat >> "$xml_file" << EOF
     <testcase name="$test_name" time="$test_time">
-      <failure message="$failure_msg - $github_link"><![CDATA[
-      $test_result
-      ]]></failure>
+      <failure message="$failure_msg - $github_link">
+        <![CDATA[$test_result]]>
+      </failure>
     </testcase>
 EOF
           # Reset variables for next test
