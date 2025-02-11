@@ -26,7 +26,7 @@ clone_repository() {
   local workdir=/home/$user
   
   if [ -d "$workdir/$repo" ]; then
-    sudo -u "$user" bash -c "cd $workdir/$repo && git fetch origin && git checkout $branch && git pull origin $branch"
+    sudo -u "$user" bash -c "cd $workdir/$repo && git fetch origin && git checkout $branch && git pull --depth 1 origin $branch"
   else
     if [ -n "$sparse_dir" ]; then
       # Sparse checkout
@@ -166,11 +166,11 @@ EOF
   local -r TEST_STATUS_UNKNOWN="[UNKNOWN]"
   local test_status="$TEST_STATUS_UNKNOWN"
   
+#실패된 테스트 케이스들은 리스트형식의 파일로 저장하여 circleci 에서 다운받을 수 있게.
+
   # Process feedback.log line by line
   while IFS= read -r line; do
     case "$line" in
-    #xml 파일에 ok, skip 인경우도 포함해야함
-    #xml 표준에 맞춰 작성필요.
       "$TEST_STATUS_OK"*)
         test_name=$(echo "$line" | sed -n 's/.*\[OK\]:.*\(cubrid-testcases-private-ex\/shell\/.*\.sh\).*/\1/p')
         test_time=""
