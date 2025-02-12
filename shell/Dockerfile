@@ -51,11 +51,14 @@ RUN ssh-keygen -A && \
     echo "Asia/Seoul" > /etc/timezone
 
 COPY docker-entrypoint.sh /entrypoint.sh
-RUN chmod 775 /entrypoint.sh
+COPY manual_test_result.jar /manual_test_result.jar
+RUN chmod 775 /entrypoint.sh && \
+    chmod 777 /manual_test_result.jar
 
 # Set up environment variables
 ENV JAVA_HOME=/usr/lib/jvm/java-1.8.0 \
     CTP_BRANCH_NAME=develop \
-    CTP_SKIP_UPDATE=0
+    CTP_SKIP_UPDATE=0 \
+    TEST_REPORT=/tmp/tests
 
 ENTRYPOINT ["/entrypoint.sh"]

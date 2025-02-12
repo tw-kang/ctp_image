@@ -2,9 +2,27 @@
 
 DEBUG=true
 
+USER=""
+WORKDIR=""
+CTP_HOME=""
+CUBRID=""
+
 # Function to print debug messages
 debug() {
   [ "$DEBUG" = true ] && echo "[debug] $1 : $2"
+}
+
+set_user_workdir() {
+  if [ "$1" == "controller" ]; then
+    USER="shell_ctrl"
+    WORKDIR="/home/shell_ctrl"
+    CTP_HOME="$WORKDIR/cubrid-testtools/CTP"
+  else
+    USER="shell"
+    WORKDIR="/home/shell"
+    CTP_HOME="$WORKDIR/cubrid-testtools/CTP"
+    CUBRID="$WORKDIR/CUBRID"
+  fi
 }
 
 # Start SSH service and set core dump limits
@@ -16,53 +34,45 @@ debug() {
 
 # Function to clone Git repository with sparse checkout
 clone_repository() {
-  local user=$1
   local repo=$2
   local branch=${3:-develop}
-  local token=${4:-}
-  local sparse_dir=${5:-}
+  local sparse_dir=${4:-}
+  local token=${GITHUB_TOKEN}
   #local url="https://${token:+$token@}github.com/CUBRID/$repo.git"
   local url="https://${token:+$token@}github.com/tw-kang/$repo.git"
-  local workdir=/home/$user
   
-  if [ -d "$workdir/$repo" ]; then
-    sudo -u "$user" bash -c "cd $workdir/$repo && git fetch origin && git checkout $branch && git pull --depth 1 origin $branch"
+  if [ -d "$WORKDIR/$repo" ]; then
+    sudo -u "$USER" bash -c "cd $WORKDIR/$repo && git fetch origin && git checkout $branch && git pull --depth 1 origin $branch"
   else
-    if [ -n "$sparse_dir" ]; then
-      # Sparse checkout
-      sudo -u "$user" bash -c "
-        mkdir -p $workdir/$repo &&
-        cd $workdir/$repo &&
-        git init &&
-        git remote add origin $url &&
-        git config core.sparseCheckout true &&
-        echo '$sparse_dir/*' > .git/info/sparse-checkout &&
-        git fetch --depth 1 origin $branch &&
-        git checkout $branch
-      "
-    else
-      # full clone
-      sudo -u "$user" git clone --depth 1 -q --branch "$branch" "$url" "$workdir/$repo"
-    fi
+    # Sparse checkout
+    sudo -u "$USER" bash -c "
+      mkdir -p $WORKDIR/$repo &&
+      cd $WORKDIR/$repo &&
+      git init &&
+      git remote add origin $url &&
+      git config core.sparseCheckout true &&
+      echo '$sparse_dir/*' > .git/info/sparse-checkout &&
+      git fetch --depth 1 origin $branch &&
+      git checkout $branch
+    "
   fi
 }
 
 # Git configuration and repository cloning
 run_checkout() {
-  local user=$1
-  debug "run_checkout user=$user" "$LINENO"
+  debug "run_checkout user=$USER" "$LINENO"
   
-  sudo -u "$user" git config --global pack.threads 0
-  clone_repository "$user" "cubrid-testtools"
+  sudo -u "$USER" git config --global pack.threads 0
+  clone_repository "$USER" "cubrid-testtools" "develop"
   
-  if [ "$user" == "shell" ]; then
+  if [ "$USER" == "shell" ]; then
     debug "cloning private repositories" "$LINENO"
-    clone_repository "$user" "cubrid-testcases" "develop" "${GITHUB_TOKEN}"
-    clone_repository "$user" "cubrid-testcases-private-ex" "develop" "${GITHUB_TOKEN}" "shell"
+    clone_repository "$USER" "cubrid-testcases" "develop"
+    clone_repository "$USER" "cubrid-testcases-private-ex" "develop" "shell"
     # test code
     debug "remove testcase directories" "$LINENO"
-    sudo -u "$user" bash -c "
-      cd /home/$user/cubrid-testcases-private-ex/shell && \
+    sudo -u "$USER" bash -c "
+      cd $WORKDIR/cubrid-testcases-private-ex/shell && \
       find . -maxdepth 1 -type d ! -name '.' ! -name '_01_utility' ! -name 'config' -exec rm -rf {} \;
     "
   fi
@@ -70,10 +80,10 @@ run_checkout() {
 
 # Function to set up environment variables
 configure() {
-  local user=$1
-  local workdir=/home/$user
-  local ctp_home=$workdir/cubrid-testtools/CTP
-  local cubrid_home=$workdir/CUBRID
+  local user=$USER
+  local workdir=$WORKDIR
+  local ctp_home=$CTP_HOME
+  local cubrid_home=$CUBRID
 
   # start_ssh_and_set_limits
   sudo /usr/sbin/sshd
@@ -112,34 +122,24 @@ EOF
 # Function to run tests
 run_test() {
   debug "run_test()" "$LINENO"
-  local user="shell"
-  local ctp_home="/home/$user/cubrid-testtools/CTP"
-  local xml_file="$TEST_REPORT/test-${TEST_SUITE}.xml"
-  local jdbc_driver="/home/$user/CUBRID/jdbc/cubrid_jdbc.jar"
   local feedback_file="$ctp_home/result/shell/current_runtime_logs/feedback.log"
   
-  # su $user -c "cd '$ctp_home' && ./bin/ctp.sh shell"
+  su $USER -c "cd '$CTP_HOME' && ./bin/ctp.sh shell"
   
-  # report_test $xml_file $feedback_file
-  #report_test $xml_file $feedback_file
-  
-  run_manual_test_result $jdbc_driver $BASELINE $xml_file
+  report_test $TEST_REPORT $feedback_file  
+  run_manual_test_result $TEST_REPORT $BASELINE
 }
 
 # Function to report test results
 report_test() {
   debug "report_test()" "$LINENO"
-  local xml_output=
-  local xml_file=$1
+  local xml_output=$1
+  local xml_file=$xml_output/test-${TEST_SUITE}.xml
   local feedback_file=$2
-  # local testcases_root_dir="/home/shell/cubrid-testcases-private-ex"
-  # local testcases_remote_url=$(cd $testcases_root_dir && git config --get remote.origin.url)
-  # local testcases_hash=$(cd $testcases_root_dir && git rev-parse HEAD)
-  # local testcases_base_url="${testcases_remote_url%.git}/blob/$testcases_hash"
 
   # Validate input
   if [ ! -f "$feedback_file" ]; then
-    debug "feedback.log not found in $result_dir" "$LINENO"
+    debug "feedback.log not found in $CTP_HOME/result/shell/current_runtime_logs" "$LINENO"
     return 1
   fi
 
@@ -175,8 +175,6 @@ EOF
   local -r TEST_STATUS_UNKNOWN="[UNKNOWN]"
   local test_status="$TEST_STATUS_UNKNOWN"
   
-#실패된 테스트 케이스들은 리스트형식의 파일로 저장하여 circleci 에서 다운받을 수 있게.
-
   # Process feedback.log line by line
   while IFS= read -r line; do
     case "$line" in
@@ -274,12 +272,14 @@ EOF
 
 run_manual_test_result() {
   debug "run_manual_test_result()" "$LINENO"
-  local jdbc_driver=$1
+  local xml_output=$1
   local baseline=$2
-  local xml_file=$3
-  cd /
-  java -cp $jdbc_driver:manual_test_result.jar manual_test_result $baseline $xml_file
   
+  cd /
+  java -cp $CUBRID/jdbc/cubrid_jdbc.jar:manual_test_result.jar manual_test_result $baseline $xml_output/test-${TEST_SUITE}.xml
+  mv $baseline_*.csv $xml_output
+  cd -
+
   debug "csv file generated" "$LINENO"
 }
 
@@ -289,15 +289,16 @@ main() {
   # start_ssh_and_set_limits
 
   local role=$1
+  set_user_workdir $role
   case "$role" in
     controller)
-      configure "shell_ctrl"
+      configure
       ;;
     worker)
-      configure "shell"
+      configure
       ;;
     checkout)
-      run_checkout "shell"
+      run_checkout
       ;;
     test)
       run_test
