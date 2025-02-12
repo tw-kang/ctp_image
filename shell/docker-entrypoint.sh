@@ -8,11 +8,11 @@ debug() {
 }
 
 # Start SSH service and set core dump limits
-start_ssh_and_set_limits() {
-  debug "start_ssh_and_set_limits()" "$LINENO"
-  sudo /usr/sbin/sshd
-  ulimit -c 1
-}
+# start_ssh_and_set_limits() {
+#   debug "start_ssh_and_set_limits()" "$LINENO"
+#   sudo /usr/sbin/sshd
+#   ulimit -c 1
+# }
 
 # Function to clone Git repository with sparse checkout
 clone_repository() {
@@ -75,6 +75,10 @@ configure() {
   local ctp_home=$workdir/cubrid-testtools/CTP
   local cubrid_home=$workdir/CUBRID
 
+  # start_ssh_and_set_limits
+  sudo /usr/sbin/sshd
+  ulimit -c 1
+
   debug "configure user=$user" "$LINENO"
   sudo -u "$user" bash -c "
     cat <<EOF >> $workdir/.bash_profile
@@ -110,19 +114,24 @@ run_test() {
   debug "run_test()" "$LINENO"
   local user="shell"
   local ctp_home="/home/$user/cubrid-testtools/CTP"
+  local xml_file="$TEST_REPORT/test-${TEST_SUITE}.xml"
+  local jdbc_driver="/home/$user/CUBRID/jdbc/cubrid_jdbc.jar"
+  local feedback_file="$ctp_home/result/shell/current_runtime_logs/feedback.log"
   
   # su $user -c "cd '$ctp_home' && ./bin/ctp.sh shell"
-  # report_test $TEST_REPORT $ctp_home/result/shell/current_runtime_logs
-  report_test /tmp/log $ctp_home/result/shell/current_runtime_logs
+  
+  # report_test $xml_file $feedback_file
+  #report_test $xml_file $feedback_file
+  
+  run_manual_test_result $jdbc_driver $BASELINE $xml_file
 }
 
 # Function to report test results
 report_test() {
   debug "report_test()" "$LINENO"
-  local xml_output=$1
-  local result_dir=$2
-  local feedback_file="$result_dir/feedback.log"
-  local xml_file="$xml_output/TEST-shell.xml"
+  local xml_output=
+  local xml_file=$1
+  local feedback_file=$2
   # local testcases_root_dir="/home/shell/cubrid-testcases-private-ex"
   # local testcases_remote_url=$(cd $testcases_root_dir && git config --get remote.origin.url)
   # local testcases_hash=$(cd $testcases_root_dir && git rev-parse HEAD)
@@ -263,10 +272,21 @@ EOF
   debug "JUnit XML generated: $xml_file" "$LINENO"
 }
 
+run_manual_test_result() {
+  debug "run_manual_test_result()" "$LINENO"
+  local jdbc_driver=$1
+  local baseline=$2
+  local xml_file=$3
+  cd /
+  java -cp $jdbc_driver:manual_test_result.jar manual_test_result $baseline $xml_file
+  
+  debug "csv file generated" "$LINENO"
+}
+
 # Main execution function
 main() {
   debug "main" "$LINENO"
-  start_ssh_and_set_limits
+  # start_ssh_and_set_limits
 
   local role=$1
   case "$role" in
