@@ -25,13 +25,6 @@ set_user_workdir() {
   fi
 }
 
-# Start SSH service and set core dump limits
-# start_ssh_and_set_limits() {
-#   debug "start_ssh_and_set_limits()" "$LINENO"
-#   sudo /usr/sbin/sshd
-#   ulimit -c 1
-# }
-
 # Function to clone Git repository with sparse checkout
 clone_repository() {
   local repo=$2
@@ -87,7 +80,7 @@ configure() {
 
   # start_ssh_and_set_limits
   sudo /usr/sbin/sshd
-  ulimit -c 1
+  # ulimit -c 1
 
   debug "configure user=$user" "$LINENO"
   sudo -u "$user" bash -c "
@@ -286,15 +279,15 @@ run_manual_test_result() {
 # Main execution function
 main() {
   debug "main" "$LINENO"
-  # start_ssh_and_set_limits
 
   local role=$1
-  set_user_workdir $role
   case "$role" in
     controller)
+      set_user_workdir "controller"
       configure
       ;;
     worker)
+      set_user_workdir "worker"
       configure
       ;;
     checkout)
@@ -315,10 +308,11 @@ main() {
   if [ "$#" -gt 0 ]; then
     debug "Executing passed command: $@" "$LINENO"
     exec "$@"
-  else
-    debug "No command passed. Keeping container alive with tail -f /dev/null" "$LINENO"
-    exec tail -f /dev/null
   fi
+  # else
+  #   debug "No command passed. Keeping container alive with tail -f /dev/null" "$LINENO"
+  #   exec tail -f /dev/null
+  # fi
 }
 
 main "$@"
