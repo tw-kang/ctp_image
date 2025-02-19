@@ -2,74 +2,28 @@
 
 DEBUG=true
 
-USER=""
-WORKDIR=""
-CTP_HOME=""
-CUBRID=""
+# USER=""
+# WORKDIR=""
+# CTP_HOME=""
+# CUBRID=""
 
 # Function to print debug messages
 debug() {
   [ "$DEBUG" = true ] && echo "[debug] $1 : $2"
 }
 
-set_user_workdir() {
-  if [ "$1" == "controller" ]; then
-    USER="shell_ctrl"
-    WORKDIR="/home/shell_ctrl"
-    CTP_HOME="$WORKDIR/cubrid-testtools/CTP"
-  else
-    USER="shell"
-    WORKDIR="/home/shell"
-    CTP_HOME="$WORKDIR/cubrid-testtools/CTP"
-    CUBRID="$WORKDIR/CUBRID"
-  fi
-}
-
-# Function to clone Git repository with sparse checkout
-clone_repository() {
-  local repo=$2
-  local branch=${3:-develop}
-  local sparse_dir=${4:-}
-  local token=${GITHUB_TOKEN}
-  #local url="https://${token:+$token@}github.com/CUBRID/$repo.git"
-  local url="https://${token:+$token@}github.com/tw-kang/$repo.git"
-  
-  if [ -d "$WORKDIR/$repo" ]; then
-    sudo -u "$USER" bash -c "cd $WORKDIR/$repo && git fetch origin && git checkout $branch && git pull --depth 1 origin $branch"
-  else
-    # Sparse checkout
-    sudo -u "$USER" bash -c "
-      mkdir -p $WORKDIR/$repo &&
-      cd $WORKDIR/$repo &&
-      git init &&
-      git remote add origin $url &&
-      git config core.sparseCheckout true &&
-      echo '$sparse_dir/*' > .git/info/sparse-checkout &&
-      git fetch --depth 1 origin $branch &&
-      git checkout $branch
-    "
-  fi
-}
-
-# Git configuration and repository cloning
-run_checkout() {
-  debug "run_checkout user=$USER" "$LINENO"
-  
-  sudo -u "$USER" git config --global pack.threads 0
-  clone_repository "$USER" "cubrid-testtools" "develop"
-  
-  if [ "$USER" == "shell" ]; then
-    debug "cloning private repositories" "$LINENO"
-    clone_repository "$USER" "cubrid-testcases" "develop"
-    clone_repository "$USER" "cubrid-testcases-private-ex" "develop" "shell"
-    # test code
-    debug "remove testcase directories" "$LINENO"
-    sudo -u "$USER" bash -c "
-      cd $WORKDIR/cubrid-testcases-private-ex/shell && \
-      find . -maxdepth 1 -type d ! -name '.' ! -name '_01_utility' ! -name 'config' -exec rm -rf {} \;
-    "
-  fi
-}
+# set_user_workdir() {
+#   if [ "$1" == "controller" ]; then
+#     USER="shell_ctrl"
+#     WORKDIR="/home/shell_ctrl"
+#     CTP_HOME="$WORKDIR/cubrid-testtools/CTP"
+#   else
+#     USER="shell"
+#     WORKDIR="/home/shell"
+#     CTP_HOME="$WORKDIR/cubrid-testtools/CTP"
+#     CUBRID="$WORKDIR/CUBRID"
+#   fi
+# }
 
 # Function to set up environment variables
 configure() {
@@ -112,10 +66,59 @@ EOF
   fi
 }
 
+# Function to clone Git repository with sparse checkout
+clone_repository() {
+  local repo=$2
+  local branch=${3:-develop}
+  local sparse_dir=${4:-}
+  local token=${GITHUB_TOKEN}
+  #local url="https://${token:+$token@}github.com/CUBRID/$repo.git"
+  local url="https://${token:+$token@}github.com/tw-kang/$repo.git"
+  
+  if [ -d "$WORKDIR/$repo" ]; then
+    sudo -u "$USER" bash -c "cd $WORKDIR/$repo && git fetch origin && git checkout $branch && git pull --depth 1 origin $branch"
+  else
+    # Sparse checkout
+    sudo -u "$USER" bash -c "
+      mkdir -p $WORKDIR/$repo &&
+      cd $WORKDIR/$repo &&
+      git init &&
+      git remote add origin $url &&
+      git config core.sparseCheckout true &&
+      echo '$sparse_dir/*' > .git/info/sparse-checkout &&
+      git fetch --depth 1 origin $branch &&
+      git checkout $branch
+    "
+  fi
+}
+
+# Git configuration and repository cloning
+run_checkout() {
+  debug "run_checkout user=$USER" "$LINENO"
+
+  configure
+  
+  sudo -u "$USER" git config --global pack.threads 0
+  clone_repository "$USER" "cubrid-testtools" "develop"
+  
+  if [ "$USER" == "shell" ]; then
+    debug "cloning private repositories" "$LINENO"
+    clone_repository "$USER" "cubrid-testcases" "develop"
+    clone_repository "$USER" "cubrid-testcases-private-ex" "develop" "shell"
+    # test code
+    debug "remove testcase directories" "$LINENO"
+    sudo -u "$USER" bash -c "
+      cd $WORKDIR/cubrid-testcases-private-ex/shell && \
+      find . -maxdepth 1 -type d ! -name '.' ! -name '_01_utility' ! -name 'config' -exec rm -rf {} \;
+    "
+  fi
+}
+
+
 # Function to run tests
 run_test() {
   debug "run_test()" "$LINENO"
-  local feedback_file="$ctp_home/result/shell/current_runtime_logs/feedback.log"
+  local feedback_file="$CTP_HOME/result/shell/current_runtime_logs/feedback.log"
   
   su $USER -c "cd '$CTP_HOME' && ./bin/ctp.sh shell"
   
@@ -279,40 +282,24 @@ run_manual_test_result() {
 # Main execution function
 main() {
   debug "main" "$LINENO"
-
-  local role=$1
-  case "$role" in
-    controller)
-      set_user_workdir "controller"
-      configure
-      ;;
-    worker)
-      set_user_workdir "worker"
-      configure
-      ;;
+  case "$1" in
     checkout)
-      run_checkout
+      set -- run_checkout
       ;;
     test)
-      run_test
+      set -- run_test
       ;;
     *)
-      echo "Unknown role: $role. Use 'controller', 'worker' 'checkout' or 'test'."
+      echo "Unknown role: $1. Use 'checkout' or 'test'."
       exit 1
       ;;
   esac
 
-  debug "Container [$role] IP: $(hostname -I)" "$LINENO"
-
-  shift
-  if [ "$#" -gt 0 ]; then
-    debug "Executing passed command: $@" "$LINENO"
+  if [ -n "$(type -t $1)" -a "$(type -t $1)" = function ]; then
+    eval "$@"
+  else
     exec "$@"
   fi
-  # else
-  #   debug "No command passed. Keeping container alive with tail -f /dev/null" "$LINENO"
-  #   exec tail -f /dev/null
-  # fi
 }
 
 main "$@"

@@ -59,6 +59,10 @@ RUN chmod 775 /entrypoint.sh && \
 ENV JAVA_HOME=/usr/lib/jvm/java-1.8.0 \
     CTP_BRANCH_NAME=develop \
     CTP_SKIP_UPDATE=0 \
-    TEST_REPORT=/tmp/tests
+    TEST_REPORT=/tmp/tests \
+    USER=shell \
+    WORKDIR=/home/shell \
+    CTP_HOME=/home/shell/cubrid-testtools/CTP \
+    CUBRID=/home/shell/CUBRID
 
 ENTRYPOINT ["/entrypoint.sh"]
