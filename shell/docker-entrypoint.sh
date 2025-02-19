@@ -2,28 +2,11 @@
 
 DEBUG=true
 
-# USER=""
-# WORKDIR=""
-# CTP_HOME=""
-# CUBRID=""
 
 # Function to print debug messages
 debug() {
   [ "$DEBUG" = true ] && echo "[debug] $1 : $2"
 }
-
-# set_user_workdir() {
-#   if [ "$1" == "controller" ]; then
-#     USER="shell_ctrl"
-#     WORKDIR="/home/shell_ctrl"
-#     CTP_HOME="$WORKDIR/cubrid-testtools/CTP"
-#   else
-#     USER="shell"
-#     WORKDIR="/home/shell"
-#     CTP_HOME="$WORKDIR/cubrid-testtools/CTP"
-#     CUBRID="$WORKDIR/CUBRID"
-#   fi
-# }
 
 # Function to set up environment variables
 configure() {
@@ -37,7 +20,7 @@ configure() {
   # ulimit -c 1
 
   debug "configure user=$user" "$LINENO"
-  sudo -u "$user" bash -c "
+  sudo -E -u "$user" bash -c "
     cat <<EOF >> $workdir/.bash_profile
 #JAVA ENV
 export JAVA_HOME=/usr/lib/jvm/java-1.8.0
@@ -50,7 +33,7 @@ EOF
   "
 
   if [ "$user" == "shell" ]; then
-    sudo -u "$user" bash -c "
+    sudo -E -u "$user" bash -c "
       cat <<EOF >> $workdir/.bash_profile
 #[shell] ENV
 export init_path=$ctp_home/shell/init_path
@@ -64,31 +47,25 @@ export PATH=$cubrid_home/bin:/usr/sbin:$PATH
 EOF
     "
   fi
+  debug "`cat $workdir/.bash_profile`" "$LINENO"
+  debug "configure done" "$LINENO"
 }
 
 # Function to clone Git repository with sparse checkout
 clone_repository() {
   local repo=$2
-  local branch=${3:-develop}
-  local sparse_dir=${4:-}
-  local token=${GITHUB_TOKEN}
-  #local url="https://${token:+$token@}github.com/CUBRID/$repo.git"
-  local url="https://${token:+$token@}github.com/tw-kang/$repo.git"
+  local branch=$3
+  #local url="https://${GITHUB_TOKEN}@github.com/CUBRID/$repo.git"
+  local url="https://${GITHUB_TOKEN}@github.com/tw-kang/$repo.git"
   
-  if [ -d "$WORKDIR/$repo" ]; then
-    sudo -u "$USER" bash -c "cd $WORKDIR/$repo && git fetch origin && git checkout $branch && git pull --depth 1 origin $branch"
+  debug "clone_repository $repo $branch $url" "$LINENO"
+  if [ ! -d "$WORKDIR/$repo" ]; then
+    sudo -E -u "$USER" bash -c "git clone -q --depth 1 --branch $branch $url $WORKDIR/$repo"
+  elif [ -d "$WORKDIR/$repo" ]; then
+    sudo -E -u "$USER" bash -c "cd $WORKDIR/$repo && git fetch --depth 1 origin $branch && git reset --hard origin/$branch && git clean -df"
   else
-    # Sparse checkout
-    sudo -u "$USER" bash -c "
-      mkdir -p $WORKDIR/$repo &&
-      cd $WORKDIR/$repo &&
-      git init &&
-      git remote add origin $url &&
-      git config core.sparseCheckout true &&
-      echo '$sparse_dir/*' > .git/info/sparse-checkout &&
-      git fetch --depth 1 origin $branch &&
-      git checkout $branch
-    "
+    debug "Cannot find .git from $WORKDIR/$repo directory!" "$LINENO"
+    exit 1
   fi
 }
 
@@ -98,19 +75,11 @@ run_checkout() {
 
   configure
   
-  sudo -u "$USER" git config --global pack.threads 0
   clone_repository "$USER" "cubrid-testtools" "develop"
   
   if [ "$USER" == "shell" ]; then
-    debug "cloning private repositories" "$LINENO"
     clone_repository "$USER" "cubrid-testcases" "develop"
-    clone_repository "$USER" "cubrid-testcases-private-ex" "develop" "shell"
-    # test code
-    debug "remove testcase directories" "$LINENO"
-    sudo -u "$USER" bash -c "
-      cd $WORKDIR/cubrid-testcases-private-ex/shell && \
-      find . -maxdepth 1 -type d ! -name '.' ! -name '_01_utility' ! -name 'config' -exec rm -rf {} \;
-    "
+    clone_repository "$USER" "cubrid-testcases-private-ex" "develop"
   fi
 }
 
