@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -le
 
 DEBUG=true
 
@@ -10,51 +10,18 @@ debug() {
 
 # Function to set up environment variables
 configure() {
-  local user=$USER
-  local workdir=$WORKDIR
-  local ctp_home=$CTP_HOME
-  local cubrid_home=$CUBRID
-
-  # start_ssh_and_set_limits
-  sudo /usr/sbin/sshd
-  # ulimit -c 1
-
   debug "configure user=$user" "$LINENO"
-  sudo -E -u "$user" bash -c "
-    cat <<EOF >> $workdir/.bash_profile
-#JAVA ENV
-export JAVA_HOME=/usr/lib/jvm/java-1.8.0
-#CTP ENV
-export CTP_HOME=$ctp_home
-export PATH=$ctp_home/bin:$ctp_home/common/script:$PATH
-export CTP_BRANCH_NAME=develop
-export CTP_SKIP_UPDATE=0
-EOF
-  "
 
-  if [ "$user" == "shell" ]; then
-    sudo -E -u "$user" bash -c "
-      cat <<EOF >> $workdir/.bash_profile
-#[shell] ENV
-export init_path=$ctp_home/shell/init_path
-#CUBRID ENV
-export CUBRID=$cubrid_home
-export CUBRID_DATABASES=$cubrid_home/databases
-export LD_LIBRARY_PATH=$cubrid_home/lib:$cubrid_home/cci/lib:$LD_LIBRARY_PATH
-export SHLIB_PATH=$LD_LIBRARY_PATH
-export LIBPATH=$LD_LIBRARY_PATH
-export PATH=$cubrid_home/bin:/usr/sbin:$PATH
-EOF
-    "
-  fi
-  debug "`cat $workdir/.bash_profile`" "$LINENO"
-  debug "configure done" "$LINENO"
+  sudo /usr/sbin/sshd
+
+  debug "`set`" "$LINENO"
+  debug "configure done. $ENV" "$LINENO"
 }
 
-# Function to clone Git repository with sparse checkout
+# Function to clone Git repository
 clone_repository() {
-  local repo=$2
-  local branch=$3
+  local repo=$1
+  local branch=$2
   #local url="https://${GITHUB_TOKEN}@github.com/CUBRID/$repo.git"
   local url="https://${GITHUB_TOKEN}@github.com/tw-kang/$repo.git"
   
@@ -67,6 +34,7 @@ clone_repository() {
     debug "Cannot find .git from $WORKDIR/$repo directory!" "$LINENO"
     exit 1
   fi
+  debug "`ls -la $WORKDIR/$repo`" "$LINENO"
 }
 
 # Git configuration and repository cloning
@@ -75,12 +43,10 @@ run_checkout() {
 
   configure
   
-  clone_repository "$USER" "cubrid-testtools" "develop"
+  clone_repository "cubrid-testtools" "$CTP_BRANCH_NAME"  
+  clone_repository "cubrid-testcases" "develop"
+  clone_repository "cubrid-testcases-private-ex" "develop"
   
-  if [ "$USER" == "shell" ]; then
-    clone_repository "$USER" "cubrid-testcases" "develop"
-    clone_repository "$USER" "cubrid-testcases-private-ex" "develop"
-  fi
 }
 
 
@@ -89,10 +55,10 @@ run_test() {
   debug "run_test()" "$LINENO"
   local feedback_file="$CTP_HOME/result/shell/current_runtime_logs/feedback.log"
   
-  su $USER -c "cd '$CTP_HOME' && ./bin/ctp.sh shell"
+  ( cd $CTP_HOME && HOME=$WORKDIR ./bin/ctp.sh shell )
   
   report_test $TEST_REPORT $feedback_file  
-  run_manual_test_result $TEST_REPORT $BASELINE
+  #run_manual_test_result $TEST_REPORT $BASELINE
 }
 
 # Function to report test results
@@ -149,7 +115,6 @@ EOF
         test_result=""
         test_status="$TEST_STATUS_OK"
         ;;
-
       "$TEST_STATUS_SKIP_BUG"*)
         test_name=$(echo "$line" | sed -n 's/.*\[SKIP_BY_BUG\].*\(cubrid-testcases-private-ex\/shell\/.*\.sh\).*/\1/p')
         test_time="0"
@@ -166,7 +131,6 @@ EOF
           test_result=""
           test_status="$TEST_STATUS_UNKNOWN"
         ;;
-
       "$TEST_STATUS_NOK":*)
         test_name=$(echo "$line" | sed -n 's/.*\[NOK\]:.*\(cubrid-testcases-private-ex\/shell\/.*\.sh\).*/\1/p')
         test_time=""
@@ -174,12 +138,10 @@ EOF
         is_timeout=false
         test_status="$TEST_STATUS_NOK"
         ;;
-
       *": NOK timeout"*)
         is_timeout=true
         test_result+="$line"$'\n'
-        ;;  
-      
+        ;;        
       [0-9][0-9]:[0-9][0-9]:[0-9][0-9]*"time="*)
           [ -n "$test_name" ] && test_time=$(echo "$line" | sed -n 's/.*time=\([0-9]*\).*/\1/p')
 
@@ -193,15 +155,12 @@ EOF
           test_result=""
           test_status="$TEST_STATUS_UNKNOWN"
           fi
-
-          ;;
-            
+          ;;            
       "[INFO] TEST STOP"*)
         if [ -n "$test_name" ] && [ -n "$test_time" ]; then
           local failure_msg="Test failed"
           [ "$is_timeout" = true ] && failure_msg="Test failed (timeout)"
-          local github_link="$testcases_base_url/$(echo "$test_name" | sed 's/cubrid-testcases-private-ex\/shell/shell/')"
-          
+          local github_link="$testcases_base_url/$(echo "$test_name" | sed 's/cubrid-testcases-private-ex\/shell/shell/')"        
           cat >> "$xml_file" << EOF
     <testcase name="$test_name" time="$test_time">
       <failure message="$failure_msg - $github_link">
@@ -214,8 +173,7 @@ EOF
           test_time=""
           test_result=""
         fi
-        ;;
-      
+        ;;      
       "[TEST STOP]"*)
         # Close XML file and exit loop
         cat >> "$xml_file" << EOF
@@ -224,7 +182,6 @@ EOF
 EOF
         break
         ;;
-
       *)
         # Collect console output only if we're processing a test case
         [ -n "$test_name" ] && test_result+="$line"$'\n'
@@ -232,7 +189,7 @@ EOF
     esac
   done < "$feedback_file"
 
-  debug "JUnit XML generated: $xml_file" "$LINENO"
+  debug "JUnit XML generated: `ls -la $xml_file`" "$LINENO"
 }
 
 run_manual_test_result() {
@@ -245,7 +202,7 @@ run_manual_test_result() {
   mv $baseline_*.csv $xml_output
   cd -
 
-  debug "csv file generated" "$LINENO"
+  debug "csv file generated: `ls -la $xml_output`" "$LINENO"
 }
 
 # Main execution function
