@@ -39,30 +39,44 @@ RUN dnf install -y epel-release && \
 RUN ssh-keygen -A && \
     sed -i 's/^account.*pam_nologin.so/#&/' /etc/pam.d/sshd && \
     mkdir -p /var/run/sshd && \
-    useradd -ms /bin/bash shell_ctrl && \
-    useradd -ms /bin/bash shell && \
-    echo 'shell_ctrl:shell_ctrl' | chpasswd && \
-    echo 'shell:shell' | chpasswd && \
-    echo 'shell_ctrl ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
-    echo 'shell ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
-    mkdir -p /home/shell/do_not_delete_core /home/shell/ERROR_BACKUP && \
-    chown -R shell:shell /home/shell/do_not_delete_core /home/shell/ERROR_BACKUP && \
+    # useradd -ms /bin/bash shell_ctrl && \
+    # useradd -ms /bin/bash shell && \
+    # echo 'shell_ctrl:shell_ctrl' | chpasswd && \
+    # echo 'shell:shell' | chpasswd && \
+    # echo 'shell_ctrl ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
+    # echo 'shell ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
+    # mkdir -p /home/shell/do_not_delete_core /home/shell/ERROR_BACKUP && \
+    # chown -R shell:shell /home/shell/do_not_delete_core /home/shell/ERROR_BACKUP && \
+    mkdir -p /home/do_not_delete_core /home/ERROR_BACKUP && \
     ln -sf /usr/share/zoneinfo/Asia/Seoul /etc/localtime && \
     echo "Asia/Seoul" > /etc/timezone
 
 COPY docker-entrypoint.sh /entrypoint.sh
 COPY manual_test_result.jar /manual_test_result.jar
-RUN chmod 775 /entrypoint.sh && \
+
+#circleci env
+ENV TEST_REPORT=/tmp/tests
+ENV WORKDIR=/home
+ENV USER=root
+# testtools env
+ENV JAVA_HOME=/usr/lib/jvm/java-1.8.0
+ENV CTP_BRANCH_NAME=develop 
+ENV CTP_SKIP_UPDATE=0 
+ENV CTP_HOME=$WORKDIR/cubrid-testtools/CTP
+ENV init_path=$CTP_HOME/shell/init_path
+ENV PATH=$CTP_HOME/bin:$CTP_HOME/common/script:$PATH
+# cubrid env
+ENV CUBRID=$WORKDIR/CUBRID
+ENV CUBRID_DATABASES=$CUBRID/databases
+ENV LD_LIBRARY_PATH=$CUBRID/lib:$CUBRID/cci/lib:$LD_LIBRARY_PATH
+ENV SHLIB_PATH=$LD_LIBRARY_PATH
+ENV LIBPATH=$LD_LIBRARY_PATH
+ENV PATH=$CUBRID/bin:/usr/sbin:$PATH
+
+RUN chmod 777 $WORKDIR && \
+    chmod 777 /entrypoint.sh && \
     chmod 777 /manual_test_result.jar
 
-# Set up environment variables
-ENV JAVA_HOME=/usr/lib/jvm/java-1.8.0 \
-    CTP_BRANCH_NAME=develop \
-    CTP_SKIP_UPDATE=0 \
-    TEST_REPORT=/tmp/tests \
-    USER=shell \
-    WORKDIR=/home/shell \
-    CTP_HOME=/home/shell/cubrid-testtools/CTP \
-    CUBRID=/home/shell/CUBRID
+WORKDIR $WORKDIR
 
 ENTRYPOINT ["/entrypoint.sh"]
