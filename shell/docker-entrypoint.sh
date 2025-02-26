@@ -189,6 +189,19 @@ EOF
     esac
   done < "$feedback_file"
 
+  # Check if there are any failed test cases
+  if [ $total_fail_case_count -gt 0 ]; then
+    echo "** There are $total_fail_case_count failed Testcases on this test."
+    # echo "** All failed Testcases are listed below:"
+    # for f in $failed_list ; do
+    #   echo " - ${f##*$testcases_root_dir/}"
+    # done
+    echo "** $total_fail_case_count cases are failed."
+    exit $total_fail_case_count
+  else
+    echo "** All Tests are passed"
+  fi
+
   debug "JUnit XML generated: `ls -la $xml_file`" "$LINENO"
 }
 
