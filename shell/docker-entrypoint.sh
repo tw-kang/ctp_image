@@ -14,7 +14,7 @@ configure() {
 
   sudo /usr/sbin/sshd
 
-  debug "`set`" "$LINENO"
+  debug "`env`" "$LINENO"
   debug "configure done. $ENV" "$LINENO"
 }
 
@@ -57,8 +57,16 @@ run_test() {
   
   ( cd $CTP_HOME && HOME=$WORKDIR ./bin/ctp.sh shell )
   
-  report_test $TEST_REPORT $feedback_file  
-  #run_manual_test_result $TEST_REPORT $BASELINE
+  set +e
+  report_test $TEST_REPORT $feedback_file
+  ret=$?
+  set -e
+  if [ $ret -gt 0 ]; then
+    run_manual_test_result $TEST_REPORT $BASELINE
+  fi
+
+  debug "run_test() exit $ret" "$LINENO"
+  exit $ret
 }
 
 # Function to report test results
@@ -160,10 +168,9 @@ EOF
         if [ -n "$test_name" ] && [ -n "$test_time" ]; then
           local failure_msg="Test failed"
           [ "$is_timeout" = true ] && failure_msg="Test failed (timeout)"
-          local github_link="$testcases_base_url/$(echo "$test_name" | sed 's/cubrid-testcases-private-ex\/shell/shell/')"        
           cat >> "$xml_file" << EOF
     <testcase name="$test_name" time="$test_time">
-      <failure message="$failure_msg - $github_link">
+      <failure message="$failure_msg">
         <![CDATA[$test_result]]>
       </failure>
     </testcase>
@@ -189,20 +196,16 @@ EOF
     esac
   done < "$feedback_file"
 
+  debug "JUnit XML generated: $(ls -la $(readlink -f $xml_output))" "$LINENO"
   # Check if there are any failed test cases
   if [ $total_fail_case_count -gt 0 ]; then
     echo "** There are $total_fail_case_count failed Testcases on this test."
-    # echo "** All failed Testcases are listed below:"
-    # for f in $failed_list ; do
-    #   echo " - ${f##*$testcases_root_dir/}"
-    # done
     echo "** $total_fail_case_count cases are failed."
-    exit $total_fail_case_count
+    return $total_fail_case_count
   else
     echo "** All Tests are passed"
+    return 0
   fi
-
-  debug "JUnit XML generated: `ls -la $xml_file`" "$LINENO"
 }
 
 run_manual_test_result() {
@@ -210,12 +213,10 @@ run_manual_test_result() {
   local xml_output=$1
   local baseline=$2
   
-  cd /
-  java -cp $CUBRID/jdbc/cubrid_jdbc.jar:manual_test_result.jar manual_test_result $baseline $xml_output/test-${TEST_SUITE}.xml
-  mv $baseline_*.csv $xml_output
-  cd -
+  java -cp $CUBRID/jdbc/cubrid_jdbc.jar:/manual_test_result.jar manual_test_result $baseline $xml_output/test-${TEST_SUITE}.xml
+  mv -f $baseline*.csv $xml_output
 
-  debug "csv file generated: `ls -la $xml_output`" "$LINENO"
+  debug "csv file generated: $(ls -la $(readlink -f $xml_output))" "$LINENO"
 }
 
 # Main execution function
